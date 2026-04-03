@@ -1,5 +1,8 @@
-import { getAll, save, remove, getSettings, getPendingDeletions, clearPendingDeletions } from './storage.js';
+import { getAll, getById, save, remove, getSettings, getPendingDeletions, clearPendingDeletions } from './storage.js';
 import { syncPull, syncPush } from './api-client.js';
+import { threeWayMerge } from './merge.js';
+import { applyMergedState } from './live-sync.js';
+import { hasWorkspaceChanged } from './capture.js';
 
 /**
  * Get/set lastSyncAt from chrome.storage.local
@@ -22,40 +25,163 @@ export async function isSyncConfigured() {
 }
 
 /**
- * Full sync: pull then push.
- * Returns { pulled, pushed, conflicts, error }
+ * Check if a workspace's tabs/groups match its syncedSnapshot (no local changes).
  */
-export async function performSync() {
+function matchesSnapshot(ws) {
+  if (!ws.syncedSnapshot) return false;
+  return !hasWorkspaceChanged(ws.syncedSnapshot, { tabs: ws.tabs, groups: ws.groups });
+}
+
+/**
+ * Full sync: pull with three-way merge, then push.
+ * @param {Array} openWorkspaceWindows - [{ windowId, workspaceId, workspaceName, workspaceColor }]
+ * @returns {{ pulled, pushed, conflicts, liveUpdates, error }}
+ */
+export async function performSync(openWorkspaceWindows = []) {
   const configured = await isSyncConfigured();
   if (!configured) {
-    return { pulled: 0, pushed: 0, conflicts: [], error: 'Sync not configured' };
+    return { pulled: 0, pushed: 0, conflicts: 0, liveUpdates: 0, error: 'Sync not configured' };
   }
 
   const lastSyncAt = await getLastSyncAt();
   let pulled = 0;
   let pushed = 0;
-  let conflicts = [];
+  let conflictCount = 0;
+  let liveUpdates = 0;
 
   try {
     // --- PULL ---
     const pullResult = await syncPull(lastSyncAt);
 
-    // Apply pulled workspaces (server wins if server version is newer)
-    const localWorkspaces = await getAll();
     for (const serverWs of pullResult.workspaces) {
-      const local = localWorkspaces.find(w => w.id === serverWs.id);
-      if (!local || new Date(serverWs.savedAt) >= new Date(local.savedAt)) {
+      const localWs = await getById(serverWs.id);
+
+      // Case 1: New workspace from remote — accept directly
+      if (!localWs) {
         serverWs.syncStatus = 'synced';
         serverWs.lastSyncAt = pullResult.serverTime;
+        serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
         await save(serverWs);
         pulled++;
+        continue;
+      }
+
+      // Case 2: Already in conflict — update remote version in conflictData
+      if (localWs.syncStatus === 'conflict' && localWs.conflictData) {
+        localWs.conflictData.remoteVersion = {
+          tabs: serverWs.tabs,
+          groups: serverWs.groups,
+          savedAt: serverWs.savedAt
+        };
+        await save(localWs);
+        continue;
+      }
+
+      // Case 3: No syncedSnapshot (migration) — fall back to LWW
+      if (!localWs.syncedSnapshot) {
+        if (new Date(serverWs.savedAt) >= new Date(localWs.savedAt)) {
+          serverWs.syncStatus = 'synced';
+          serverWs.lastSyncAt = pullResult.serverTime;
+          serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+          await save(serverWs);
+          pulled++;
+        }
+        // Either way, snapshot is now set for future merges
+        if (!localWs.syncedSnapshot) {
+          localWs.syncedSnapshot = { tabs: localWs.tabs, groups: localWs.groups };
+          await save(localWs);
+        }
+        continue;
+      }
+
+      const base = localWs.syncedSnapshot;
+      const localState = { tabs: localWs.tabs, groups: localWs.groups };
+      const remoteState = { tabs: serverWs.tabs, groups: serverWs.groups };
+
+      const localChanged = hasWorkspaceChanged(base, localState);
+      const remoteChanged = hasWorkspaceChanged(base, remoteState);
+
+      // Case 4: Only remote changed — accept remote + live sync
+      if (!localChanged && remoteChanged) {
+        localWs.tabs = serverWs.tabs;
+        localWs.groups = serverWs.groups;
+        localWs.savedAt = serverWs.savedAt;
+        localWs.name = serverWs.name;
+        localWs.color = serverWs.color;
+        localWs.syncStatus = 'synced';
+        localWs.lastSyncAt = pullResult.serverTime;
+        localWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+        await save(localWs);
+        pulled++;
+
+        // Live sync to open window
+        const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+        if (openWin) {
+          try {
+            await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
+            liveUpdates++;
+          } catch (e) {
+            console.warn('[Tabsy] Live sync failed:', e.message);
+          }
+        }
+        continue;
+      }
+
+      // Case 5: Only local changed — keep local, will push later
+      if (localChanged && !remoteChanged) {
+        continue;
+      }
+
+      // Case 6: Neither changed — just update sync metadata
+      if (!localChanged && !remoteChanged) {
+        localWs.lastSyncAt = pullResult.serverTime;
+        localWs.syncStatus = 'synced';
+        await save(localWs);
+        continue;
+      }
+
+      // Case 7: Both changed — three-way merge
+      const mergeResult = threeWayMerge(base, localState, remoteState);
+
+      if (mergeResult.hasConflicts) {
+        localWs.syncStatus = 'conflict';
+        localWs.conflictData = {
+          localVersion: { tabs: localWs.tabs, groups: localWs.groups, savedAt: localWs.savedAt },
+          remoteVersion: { tabs: serverWs.tabs, groups: serverWs.groups, savedAt: serverWs.savedAt },
+          conflicts: mergeResult.conflicts
+        };
+        await save(localWs);
+        conflictCount++;
+      } else {
+        // Clean merge — apply and mark as pending for push
+        localWs.tabs = mergeResult.merged.tabs;
+        localWs.groups = mergeResult.merged.groups;
+        localWs.savedAt = new Date().toISOString();
+        localWs.syncStatus = 'pending';
+        localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
+        await save(localWs);
+        pulled++;
+
+        // Live sync to open window
+        const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+        if (openWin) {
+          try {
+            await applyMergedState(openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
+            liveUpdates++;
+          } catch (e) {
+            console.warn('[Tabsy] Live sync failed:', e.message);
+          }
+        }
       }
     }
 
     // Apply pulled deletions
     for (const deletedId of pullResult.deleted) {
-      await remove(deletedId);
-      pulled++;
+      const ws = await getById(deletedId);
+      if (ws) {
+        await remove(deletedId);
+        pulled++;
+      }
     }
 
     // --- PUSH ---
@@ -68,36 +194,80 @@ export async function performSync() {
     const pendingDeletes = await getPendingDeletions();
 
     if (toPush.length > 0 || pendingDeletes.length > 0) {
-      const pushResult = await syncPush(toPush, pendingDeletes);
-      conflicts = pushResult.conflicts || [];
+      // Strip client-only fields before sending to server
+      const pushPayload = toPush.map(ws => ({
+        id: ws.id,
+        name: ws.name,
+        color: ws.color,
+        savedAt: ws.savedAt,
+        groups: ws.groups,
+        tabs: ws.tabs
+      }));
 
-      // Mark pushed workspaces as synced
-      for (const ws of toPush) {
-        const conflicted = conflicts.find(c => c.id === ws.id);
-        if (conflicted) {
-          // Server wins — apply server version
-          const serverVer = conflicted.serverVersion;
+      const pushResult = await syncPush(pushPayload, pendingDeletes);
+      const serverConflicts = pushResult.conflicts || [];
+
+      // Handle push conflicts with three-way merge
+      for (const conflict of serverConflicts) {
+        const localWs = await getById(conflict.id);
+        if (!localWs) continue;
+
+        if (localWs.syncedSnapshot) {
+          const base = localWs.syncedSnapshot;
+          const localState = { tabs: localWs.tabs, groups: localWs.groups };
+          const remoteState = { tabs: conflict.serverVersion.tabs, groups: conflict.serverVersion.groups };
+          const mergeResult = threeWayMerge(base, localState, remoteState);
+
+          if (mergeResult.hasConflicts) {
+            localWs.syncStatus = 'conflict';
+            localWs.conflictData = {
+              localVersion: { tabs: localWs.tabs, groups: localWs.groups, savedAt: localWs.savedAt },
+              remoteVersion: { tabs: conflict.serverVersion.tabs, groups: conflict.serverVersion.groups, savedAt: conflict.serverVersion.savedAt },
+              conflicts: mergeResult.conflicts
+            };
+            await save(localWs);
+            conflictCount++;
+          } else {
+            // Clean merge — save merged, will push next cycle
+            localWs.tabs = mergeResult.merged.tabs;
+            localWs.groups = mergeResult.merged.groups;
+            localWs.savedAt = new Date().toISOString();
+            localWs.syncStatus = 'pending';
+            localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
+            await save(localWs);
+          }
+        } else {
+          // No snapshot — LWW fallback, server wins
+          const serverVer = conflict.serverVersion;
           serverVer.syncStatus = 'synced';
           serverVer.lastSyncAt = pushResult.serverTime;
+          serverVer.syncedSnapshot = { tabs: serverVer.tabs, groups: serverVer.groups };
           await save(serverVer);
-        } else {
-          ws.syncStatus = 'synced';
-          ws.lastSyncAt = pushResult.serverTime;
-          await save(ws);
-          pushed++;
         }
       }
 
-      // Clear pending deletions after successful push
+      // Mark successful pushes as synced + store snapshot
+      const conflictIds = new Set(serverConflicts.map(c => c.id));
+      for (const ws of toPush) {
+        if (conflictIds.has(ws.id)) continue;
+        const fresh = await getById(ws.id);
+        if (!fresh) continue;
+        fresh.syncStatus = 'synced';
+        fresh.lastSyncAt = pushResult.serverTime;
+        fresh.syncedSnapshot = { tabs: fresh.tabs, groups: fresh.groups };
+        await save(fresh);
+        pushed++;
+      }
+
       await clearPendingDeletions();
       await setLastSyncAt(pushResult.serverTime);
     } else {
       await setLastSyncAt(pullResult.serverTime);
     }
 
-    return { pulled, pushed, conflicts, error: null };
+    return { pulled, pushed, conflicts: conflictCount, liveUpdates, error: null };
   } catch (err) {
     console.error('Sync error:', err);
-    return { pulled, pushed, conflicts, error: err.message };
+    return { pulled, pushed, conflicts: conflictCount, liveUpdates, error: err.message };
   }
 }

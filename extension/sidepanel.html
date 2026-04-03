@@ -36,6 +36,37 @@
       font-weight: 600;
       color: var(--text);
     }
+    .current-ws-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .current-ws-meta {
+      font-size: 11px;
+      color: var(--text-sec);
+      margin-top: 4px;
+    }
+
+    /* Save-new toggle (collapsible) */
+    .save-new-toggle {
+      padding: 8px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .save-new-toggle:hover { background: #f0f0f0; }
+    .save-new-toggle .arrow { transition: transform 0.15s; }
+    .save-new-toggle .arrow.open { transform: rotate(90deg); }
+    .save-section.collapsed { display: none; }
 
     /* Save section */
     .save-section {
@@ -181,6 +212,20 @@
     }
     .sync-status.ok { color: #107c10; }
     .sync-status.err { color: var(--danger); }
+    /* Auto-sync toggle */
+    .auto-sync-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--text-sec);
+      cursor: pointer;
+      user-select: none;
+    }
+    .auto-sync-toggle input {
+      cursor: pointer;
+    }
     .sync-spinner {
       display: inline-block;
       width: 12px;
@@ -257,16 +302,62 @@
     }
     .settings-status.ok { color: #107c10; }
     .settings-status.err { color: var(--danger); }
+
+    /* Conflict banner */
+    .conflict-banner {
+      padding: 8px 12px;
+      background: #fde7e9;
+      color: #d13438;
+      font-size: 12px;
+      font-weight: 600;
+      border-bottom: 1px solid #f5c6cb;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Conflict section within workspace card */
+    .ws-conflict-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .conflict-summary {
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+    .conflict-label {
+      color: #d13438;
+      font-weight: 600;
+    }
+    .conflict-detail {
+      color: var(--text-sec);
+      display: block;
+      margin-top: 2px;
+    }
+    .conflict-actions {
+      display: flex;
+      gap: 4px;
+    }
   </style>
 </head>
 <body>
-  <!-- Current workspace info -->
+  <!-- Current workspace info + actions -->
   <div class="current-ws" id="current-ws">
     <span class="ws-label" id="current-ws-label">No workspace detected</span>
+    <div class="current-ws-meta" id="current-ws-meta" style="display:none"></div>
+    <div class="current-ws-actions" id="current-ws-actions" style="display:none">
+      <button class="btn btn-primary btn-sm" id="quick-save-btn">Save</button>
+      <button class="btn btn-danger btn-sm" id="quick-delete-btn">Delete</button>
+    </div>
   </div>
 
-  <!-- Save section -->
-  <div class="save-section">
+  <!-- Save as new workspace (collapsible when in a workspace) -->
+  <div class="save-new-toggle" id="save-new-toggle" style="display:none">
+    <span>Save as New Workspace</span>
+    <span class="arrow" id="save-new-arrow">&#9654;</span>
+  </div>
+  <div class="save-section" id="save-section">
     <input type="text" id="ws-name" placeholder="Workspace name">
     <div class="color-picker" id="color-picker"></div>
     <div class="btn-row">
@@ -279,7 +370,14 @@
   <div class="sync-bar" id="sync-bar" style="display:none">
     <button class="btn btn-primary btn-sm" id="sync-btn">Sync</button>
     <span class="sync-status" id="sync-status"></span>
+    <label class="auto-sync-toggle">
+      <input type="checkbox" id="auto-sync-checkbox" checked>
+      Auto
+    </label>
   </div>
+
+  <!-- Conflict banner -->
+  <div id="conflict-banner" class="conflict-banner" style="display:none"></div>
 
   <!-- Workspace list -->
   <div class="list-header">Saved Workspaces</div>

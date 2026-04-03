@@ -86,6 +86,13 @@ export async function clearPendingDeletions() {
   await chrome.storage.local.set({ pendingDeletions: [] });
 }
 
+// --- Conflict helpers ---
+
+export async function getConflicts() {
+  const all = await getAll();
+  return all.filter(w => w.syncStatus === 'conflict');
+}
+
 // --- Sync Settings ---
 
 export async function getSettings() {
@@ -95,4 +102,15 @@ export async function getSettings() {
 
 export async function saveSettings(settings) {
   await chrome.storage.local.set({ syncSettings: settings });
+}
+
+// --- Auto-sync setting (default: enabled) ---
+
+export async function getAutoSync() {
+  const { autoSyncEnabled } = await chrome.storage.local.get('autoSyncEnabled');
+  return autoSyncEnabled !== false; // default true
+}
+
+export async function setAutoSync(enabled) {
+  await chrome.storage.local.set({ autoSyncEnabled: !!enabled });
 }
