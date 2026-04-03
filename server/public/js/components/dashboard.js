@@ -97,6 +97,7 @@ export async function render(container) {
         <div class="workspace-card-meta">
           <span>${w.tabCount} tab${w.tabCount !== 1 ? 's' : ''}</span>
           <span>${w.groupCount} group${w.groupCount !== 1 ? 's' : ''}</span>
+          ${w.flowCount > 0 ? `<span>${w.flowCount} flow${w.flowCount !== 1 ? 's' : ''}</span>` : ''}
           <span>${formatTime(w.savedAt)}</span>
         </div>
         <div class="workspace-card-actions">

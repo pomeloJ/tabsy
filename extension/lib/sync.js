@@ -61,10 +61,21 @@ export async function performSync(openWorkspaceWindows = []) {
         serverWs.syncStatus = 'synced';
         serverWs.lastSyncAt = pullResult.serverTime;
         serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+        if (!serverWs.flows) serverWs.flows = [];
         await save(serverWs);
         pulled++;
         continue;
       }
+
+      // Merge flows: server pull 不應該覆蓋 local 的 flows
+      // 以 local flows 為主，server 有而 local 沒有的才加入
+      const mergedFlows = [...(localWs.flows || [])];
+      for (const sf of (serverWs.flows || [])) {
+        if (!mergedFlows.find(f => f.id === sf.id)) {
+          mergedFlows.push(sf);
+        }
+      }
+      const flowsChanged = mergedFlows.length !== (localWs.flows || []).length;
 
       // Case 2: Already in conflict — update remote version in conflictData
       if (localWs.syncStatus === 'conflict' && localWs.conflictData) {
@@ -80,7 +91,8 @@ export async function performSync(openWorkspaceWindows = []) {
       // Case 3: No syncedSnapshot (migration) — fall back to LWW
       if (!localWs.syncedSnapshot) {
         if (new Date(serverWs.savedAt) >= new Date(localWs.savedAt)) {
-          serverWs.syncStatus = 'synced';
+          serverWs.flows = mergedFlows;
+          serverWs.syncStatus = flowsChanged ? 'pending' : 'synced';
           serverWs.lastSyncAt = pullResult.serverTime;
           serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
           await save(serverWs);
@@ -105,10 +117,11 @@ export async function performSync(openWorkspaceWindows = []) {
       if (!localChanged && remoteChanged) {
         localWs.tabs = serverWs.tabs;
         localWs.groups = serverWs.groups;
+        localWs.flows = mergedFlows;
         localWs.savedAt = serverWs.savedAt;
         localWs.name = serverWs.name;
         localWs.color = serverWs.color;
-        localWs.syncStatus = 'synced';
+        localWs.syncStatus = flowsChanged ? 'pending' : 'synced';
         localWs.lastSyncAt = pullResult.serverTime;
         localWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
         await save(localWs);
@@ -134,8 +147,9 @@ export async function performSync(openWorkspaceWindows = []) {
 
       // Case 6: Neither changed — just update sync metadata
       if (!localChanged && !remoteChanged) {
+        localWs.flows = mergedFlows;
         localWs.lastSyncAt = pullResult.serverTime;
-        localWs.syncStatus = 'synced';
+        localWs.syncStatus = flowsChanged ? 'pending' : 'synced';
         await save(localWs);
         continue;
       }
@@ -201,7 +215,8 @@ export async function performSync(openWorkspaceWindows = []) {
         color: ws.color,
         savedAt: ws.savedAt,
         groups: ws.groups,
-        tabs: ws.tabs
+        tabs: ws.tabs,
+        flows: ws.flows || []
       }));
 
       const pushResult = await syncPush(pushPayload, pendingDeletes);
@@ -237,9 +252,11 @@ export async function performSync(openWorkspaceWindows = []) {
             await save(localWs);
           }
         } else {
-          // No snapshot — LWW fallback, server wins
+          // No snapshot — LWW fallback, server wins, but preserve local flows
           const serverVer = conflict.serverVersion;
-          serverVer.syncStatus = 'synced';
+          const localForFlows = await getById(conflict.id);
+          serverVer.flows = localForFlows?.flows || serverVer.flows || [];
+          serverVer.syncStatus = (serverVer.flows.length > 0) ? 'pending' : 'synced';
           serverVer.lastSyncAt = pushResult.serverTime;
           serverVer.syncedSnapshot = { tabs: serverVer.tabs, groups: serverVer.groups };
           await save(serverVer);

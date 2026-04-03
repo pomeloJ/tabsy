@@ -316,6 +316,93 @@
       gap: 6px;
     }
 
+    /* Flow section in workspace card */
+    .ws-flow-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .ws-flow-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .flow-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      background: #f0f0f0;
+      margin: 2px 2px 2px 0;
+      cursor: pointer;
+      transition: background 0.15s;
+      border: none;
+      color: var(--text);
+    }
+    .flow-chip:hover { background: #e0e0e0; }
+    .flow-chip.disabled { opacity: 0.5; }
+    .flow-chip .flow-run { color: #107c10; font-weight: 700; cursor: pointer; }
+    .flow-chip .flow-run:hover { color: #0b5a0b; }
+    .flow-chip .flow-stop { color: #d13438; font-weight: 700; cursor: pointer; }
+    .flow-chip .flow-delete { color: #999; cursor: pointer; font-size: 13px; line-height: 1; }
+    .flow-chip .flow-delete:hover { color: #d13438; }
+
+    /* Flow runner log panel */
+    .flow-log-panel {
+      display: none;
+      margin: 0 12px 8px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: var(--radius);
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 11px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .flow-log-panel.open { display: block; }
+    .flow-log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: #2d2d2d;
+      border-radius: var(--radius) var(--radius) 0 0;
+      color: #aaa;
+      font-size: 10px;
+    }
+    .flow-log-header .flow-state { font-weight: 600; }
+    .flow-log-header .flow-state.running { color: #4ec9b0; }
+    .flow-log-header .flow-state.done { color: #6a9955; }
+    .flow-log-header .flow-state.error { color: #f44747; }
+    .flow-log-close {
+      background: none;
+      border: none;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+    }
+    .flow-log-close:hover { color: #fff; }
+    .flow-log-body {
+      padding: 8px 10px;
+    }
+    .flow-log-entry { margin: 2px 0; }
+    .flow-log-time { color: #666; }
+    .flow-log-msg { color: #d4d4d4; }
+    .flow-log-err { color: #f44747; }
+    .flow-log-vars {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #333;
+      color: #9cdcfe;
+    }
+
     /* Conflict section within workspace card */
     .ws-conflict-section {
       margin-top: 8px;
@@ -378,6 +465,18 @@
 
   <!-- Conflict banner -->
   <div id="conflict-banner" class="conflict-banner" style="display:none"></div>
+
+  <!-- Flow runner log -->
+  <div class="flow-log-panel" id="flow-log-panel">
+    <div class="flow-log-header">
+      <span>Flow: <span id="flow-log-name"></span></span>
+      <span>
+        <span class="flow-state" id="flow-log-state"></span>
+        <button class="flow-log-close" id="flow-log-close">&times;</button>
+      </span>
+    </div>
+    <div class="flow-log-body" id="flow-log-body"></div>
+  </div>
 
   <!-- Workspace list -->
   <div class="list-header">Saved Workspaces</div>

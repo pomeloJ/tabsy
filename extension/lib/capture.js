@@ -1,4 +1,4 @@
-import { generateId, getAll } from './storage.js';
+import { generateId, getAll, getById } from './storage.js';
 
 const MARKER_URL = 'about:blank#ws-marker';
 
@@ -50,6 +50,13 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     index: i
   }));
 
+  // Preserve existing flows when recapturing
+  let existingFlows = [];
+  if (existingId) {
+    const existing = await getById(existingId);
+    if (existing?.flows) existingFlows = existing.flows;
+  }
+
   return {
     id: existingId || generateId(),
     name,
@@ -57,6 +64,7 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     savedAt: new Date().toISOString(),
     groups,
     tabs: workspaceTabs,
+    flows: existingFlows,
     syncStatus: existingId ? 'pending' : 'local_only'
   };
 }

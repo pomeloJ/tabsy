@@ -127,6 +127,8 @@ function renderAll() {
 
     <div id="ws-groups"></div>
 
+    <div id="ws-flows"></div>
+
     <div class="ws-add-section">
       <div class="ws-add-row" id="add-tab-row">
         <input type="url" class="ws-add-input" id="add-tab-url" placeholder="Add tab — paste URL...">
@@ -146,6 +148,7 @@ function renderAll() {
 
   updateMeta();
   renderGroups();
+  renderFlows();
   bindHeader();
   bindAddForms();
   bindSave();
@@ -210,6 +213,125 @@ function renderGroups() {
   groupsEl.innerHTML = html;
   bindGroupEvents(groupsEl);
 }
+
+// --- Render flows (read-only) ---
+const TRIGGER_LABELS = { manual: 'Manual', page_load: 'Page Load', page_idle: 'Page Idle' };
+const BLOCK_LABELS = {
+  click: '👆 Click', fill: '✏️ Fill', select: '📋 Select', check: '☑️ Check',
+  scroll_to: '📜 Scroll', remove_element: '🗑️ Remove', set_attribute: '🏷️ Attr',
+  add_class: '🎨 Class+', remove_class: '🎨 Class-', inject_css: '💅 CSS',
+  navigate: '🔗 Navigate', wait_element: '⏳ Wait', wait_hidden: '⏳ WaitHide',
+  delay: '⏱️ Delay', get_text: '📋 GetText', get_attribute: '📋 GetAttr',
+  get_value: '📋 GetVal', set_variable: '📦 SetVar', eval_expression: '🧮 Eval',
+  if: '❓ If', loop: '🔄 Loop', loop_elements: '🔄 Each', try_catch: '🛡️ Try',
+  break: '⏹️ Break', log: '💬 Log', alert: '🔔 Alert', run_script: '⚡ Script'
+};
+
+function renderFlows() {
+  const flowsEl = detailEl.querySelector('#ws-flows');
+  const flows = state.flows || [];
+
+  if (flows.length === 0) {
+    flowsEl.innerHTML = '';
+    return;
+  }
+
+  flowsEl.innerHTML = `
+    <div class="ws-flows-section">
+      <div class="ws-flows-header">
+        <span class="ws-flows-title">${svgFlow} Flows</span>
+        <span class="ws-flows-count">${flows.length}</span>
+      </div>
+      ${flows.map(f => renderFlowCard(f)).join('')}
+    </div>
+  `;
+
+  // Toggle collapse
+  flowsEl.querySelectorAll('.ws-flow-card-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.closest('.ws-flow-card').classList.toggle('collapsed');
+    });
+  });
+}
+
+function renderFlowCard(flow) {
+  const trigger = TRIGGER_LABELS[flow.trigger] || flow.trigger;
+  const blockCount = countBlocks(flow.blocks || []);
+  const varCount = Object.keys(flow.variables || {}).length;
+
+  return `
+    <div class="ws-flow-card ${flow.enabled ? '' : 'disabled'}">
+      <div class="ws-flow-card-header">
+        <span class="ws-flow-status ${flow.enabled ? 'enabled' : 'off'}">${flow.enabled ? '●' : '○'}</span>
+        <span class="ws-flow-name">${escapeHtml(flow.name)}</span>
+        <span class="ws-flow-trigger">${trigger}</span>
+        <svg class="ws-flow-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="ws-flow-card-body">
+        ${flow.match ? `<div class="ws-flow-meta-row"><span class="ws-flow-meta-label">URL Match</span><code>${escapeHtml(flow.match)}</code></div>` : ''}
+        <div class="ws-flow-meta-row">
+          <span class="ws-flow-meta-label">Blocks</span><span>${blockCount}</span>
+          <span class="ws-flow-meta-label" style="margin-left:12px">Variables</span><span>${varCount}</span>
+        </div>
+        ${renderFlowBlocks(flow.blocks || [])}
+      </div>
+    </div>
+  `;
+}
+
+function renderFlowBlocks(blocks, depth = 0) {
+  if (blocks.length === 0) return '<div class="ws-flow-blocks-empty">No blocks</div>';
+  return `<div class="ws-flow-blocks" style="margin-left:${depth * 12}px">
+    ${blocks.map(b => {
+      const label = BLOCK_LABELS[b.type] || b.type;
+      const summary = getFlowBlockSummary(b);
+      let nested = '';
+      if (b.then && b.then.length) nested += `<div class="ws-flow-branch-label">Then</div>${renderFlowBlocks(b.then, depth + 1)}`;
+      if (b.else && b.else.length) nested += `<div class="ws-flow-branch-label">Else</div>${renderFlowBlocks(b.else, depth + 1)}`;
+      if (b.body && b.body.length) nested += renderFlowBlocks(b.body, depth + 1);
+      if (b.try && b.try.length) nested += `<div class="ws-flow-branch-label">Try</div>${renderFlowBlocks(b.try, depth + 1)}`;
+      if (b.catch && b.catch.length) nested += `<div class="ws-flow-branch-label">Catch</div>${renderFlowBlocks(b.catch, depth + 1)}`;
+      return `<div class="ws-flow-block">
+        <span class="ws-flow-block-label">${label}</span>
+        ${summary ? `<span class="ws-flow-block-summary">${escapeHtml(summary)}</span>` : ''}
+        ${nested}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function getFlowBlockSummary(b) {
+  switch (b.type) {
+    case 'click': case 'scroll_to': case 'remove_element': return b.selector || '';
+    case 'fill': return b.selector ? `${b.selector} = "${(b.value || '').slice(0, 20)}"` : '';
+    case 'wait_element': case 'wait_hidden': return `${b.selector || ''} (${b.timeout || 5000}ms)`;
+    case 'delay': return `${b.ms || 1000}ms`;
+    case 'navigate': return (b.url || '').slice(0, 40);
+    case 'log': case 'alert': return (b.message || '').slice(0, 40);
+    case 'set_variable': return `${b.variable} = "${(b.value || '').slice(0, 20)}"`;
+    case 'get_text': case 'get_value': return `${b.selector} → ${b.variable}`;
+    case 'if': return b.condition ? (b.condition.selector || b.condition.text || b.condition.type) : '';
+    case 'loop': return `${b.times}x`;
+    case 'loop_elements': return `${b.selector} as ${b.itemVariable || 'el'}`;
+    case 'inject_css': return (b.css || '').slice(0, 30);
+    case 'run_script': return (b.code || '').slice(0, 30);
+    default: return '';
+  }
+}
+
+function countBlocks(blocks) {
+  let count = blocks.length;
+  for (const b of blocks) {
+    if (b.then) count += countBlocks(b.then);
+    if (b.else) count += countBlocks(b.else);
+    if (b.body) count += countBlocks(b.body);
+    if (b.try) count += countBlocks(b.try);
+    if (b.catch) count += countBlocks(b.catch);
+  }
+  return count;
+}
+
+const svgFlow = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
 
 function renderTab(tab, idx) {
   const faviconUrl = getFaviconUrl(tab.url);
@@ -630,7 +752,8 @@ async function saveWorkspace() {
     color: state.color,
     savedAt: state.savedAt,
     groups: state.groups,
-    tabs: state.tabs
+    tabs: state.tabs,
+    flows: state.flows || []
   });
 
   saving = false;

@@ -104,6 +104,54 @@ export async function saveSettings(settings) {
   await chrome.storage.local.set({ syncSettings: settings });
 }
 
+// --- Flow CRUD (flows 存在 workspace.flows 陣列中，跟著 sync 一起同步) ---
+
+export async function getFlows(workspaceId) {
+  if (workspaceId) {
+    const ws = await getById(workspaceId);
+    return ws?.flows || [];
+  }
+  // 回傳所有 workspace 的 flows map: { wsId: [...] }
+  const all = await getAll();
+  const map = {};
+  for (const ws of all) {
+    if (ws.flows && ws.flows.length > 0) {
+      map[ws.id] = ws.flows;
+    }
+  }
+  return map;
+}
+
+export async function getFlowById(workspaceId, flowId) {
+  const flows = await getFlows(workspaceId);
+  return flows.find(f => f.id === flowId) || null;
+}
+
+export async function saveFlow(workspaceId, flow) {
+  const ws = await getById(workspaceId);
+  if (!ws) return flow;
+  if (!ws.flows) ws.flows = [];
+  const idx = ws.flows.findIndex(f => f.id === flow.id);
+  if (idx >= 0) {
+    ws.flows[idx] = flow;
+  } else {
+    ws.flows.push(flow);
+  }
+  ws.savedAt = new Date().toISOString();
+  if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
+  await save(ws);
+  return flow;
+}
+
+export async function removeFlow(workspaceId, flowId) {
+  const ws = await getById(workspaceId);
+  if (!ws || !ws.flows) return;
+  ws.flows = ws.flows.filter(f => f.id !== flowId);
+  ws.savedAt = new Date().toISOString();
+  if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
+  await save(ws);
+}
+
 // --- Auto-sync setting (default: enabled) ---
 
 export async function getAutoSync() {
@@ -114,3 +162,27 @@ export async function getAutoSync() {
 export async function setAutoSync(enabled) {
   await chrome.storage.local.set({ autoSyncEnabled: !!enabled });
 }
+
+// --- Migration: 把舊的獨立 flows key 搬到 workspace.flows ---
+async function migrateFlows() {
+  const { flows, _flowsMigrated } = await chrome.storage.local.get(['flows', '_flowsMigrated']);
+  if (_flowsMigrated || !flows || Object.keys(flows).length === 0) return;
+
+  const all = await getAll();
+  let changed = false;
+  for (const ws of all) {
+    const wsFlows = flows[ws.id];
+    if (wsFlows && wsFlows.length > 0) {
+      ws.flows = wsFlows;
+      if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
+      changed = true;
+    }
+  }
+  if (changed) {
+    await chrome.storage.local.set({ workspaces: all });
+  }
+  // 標記已遷移，刪除舊 key
+  await chrome.storage.local.set({ _flowsMigrated: true });
+  await chrome.storage.local.remove('flows');
+}
+migrateFlows();

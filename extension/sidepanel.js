@@ -2,11 +2,14 @@ import {
   COLORS, hexToChromeColor,
   getAll, getById, save, remove, clearAll,
   getSettings, saveSettings, getConflicts,
-  getAutoSync, setAutoSync
+  getAutoSync, setAutoSync,
+  getFlows, getFlowById, saveFlow, removeFlow
 } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
+import { FlowRunner, RunState } from './lib/flow-runner.js';
+import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES } from './lib/flow-schema.js';
 
 const MARKER_URL = 'about:blank#ws-marker';
 
@@ -273,6 +276,9 @@ async function renderList() {
   // Sort by savedAt descending
   workspaces.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
+  // Load flows for all workspaces
+  const allFlows = await getFlows();
+
   wsList.innerHTML = workspaces.map(w => `
     <div class="ws-card" style="border-left-color:${w.color}" data-id="${w.id}">
       <div class="ws-card-header">
@@ -284,6 +290,7 @@ async function renderList() {
         ${w.tabs.length} tab${w.tabs.length !== 1 ? 's' : ''} · ${w.groups.length} group${w.groups.length !== 1 ? 's' : ''} · ${formatTime(w.savedAt)}
       </div>
       ${renderConflictSection(w)}
+      ${renderFlowChips(w.id, allFlows[w.id])}
       <div class="ws-card-actions">
         <button class="btn btn-primary btn-sm" data-restore="${w.id}">Restore</button>
         <button class="btn btn-danger btn-sm" data-delete="${w.id}">Delete</button>
@@ -318,6 +325,38 @@ async function renderList() {
       await resolveConflict(btn.dataset.resolve, btn.dataset.action);
       btn.disabled = false;
     });
+  });
+
+  // Flow buttons — click to edit, dblclick to rename
+  wsList.querySelectorAll('[data-edit-flow]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFlowEditor(el.dataset.ws, el.dataset.editFlow);
+    });
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startRenameFlow(el, el.dataset.ws, el.dataset.editFlow);
+    });
+  });
+
+  wsList.querySelectorAll('[data-run-flow]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runFlowOnActiveTab(el.dataset.ws, el.dataset.runFlow);
+    });
+  });
+
+  wsList.querySelectorAll('[data-del-flow]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('Delete this flow?')) return;
+      await removeFlow(el.dataset.ws, el.dataset.delFlow);
+      await renderList();
+    });
+  });
+
+  wsList.querySelectorAll('[data-add-flow]').forEach(btn => {
+    btn.addEventListener('click', () => addNewFlow(btn.dataset.addFlow));
   });
 }
 
@@ -586,6 +625,167 @@ saveSettingsBtn.addEventListener('click', async () => {
     await updateSyncBar();
   }, 100);
 });
+
+// --- Flow execution ---
+
+const flowLogPanel = document.getElementById('flow-log-panel');
+const flowLogName = document.getElementById('flow-log-name');
+const flowLogState = document.getElementById('flow-log-state');
+const flowLogBody = document.getElementById('flow-log-body');
+const flowLogClose = document.getElementById('flow-log-close');
+
+let activeRunner = null;
+
+flowLogClose.addEventListener('click', () => {
+  flowLogPanel.classList.remove('open');
+  if (activeRunner && activeRunner.state === RunState.RUNNING) {
+    activeRunner.stop();
+  }
+  activeRunner = null;
+});
+
+function showFlowLog(flowName) {
+  flowLogName.textContent = flowName;
+  flowLogBody.innerHTML = '';
+  flowLogState.textContent = '';
+  flowLogState.className = 'flow-state';
+  flowLogPanel.classList.add('open');
+}
+
+function appendFlowLog(entry) {
+  const div = document.createElement('div');
+  div.className = 'flow-log-entry';
+  const time = new Date(entry.time).toLocaleTimeString();
+  div.innerHTML = `<span class="flow-log-time">${time}</span> <span class="flow-log-msg">${escapeHtml(entry.message)}</span>`;
+  flowLogBody.appendChild(div);
+  flowLogBody.scrollTop = flowLogBody.scrollHeight;
+}
+
+function showFlowResult(result) {
+  flowLogState.textContent = result.state;
+  flowLogState.className = `flow-state ${result.state === RunState.DONE ? 'done' : result.state === RunState.ERROR ? 'error' : ''}`;
+
+  if (result.error) {
+    const div = document.createElement('div');
+    div.className = 'flow-log-entry';
+    div.innerHTML = `<span class="flow-log-err">Error: ${escapeHtml(result.error)}</span>`;
+    flowLogBody.appendChild(div);
+  }
+
+  // Show final variables
+  const vars = Object.entries(result.variables).filter(([k]) => !k.startsWith('_'));
+  if (vars.length > 0) {
+    const div = document.createElement('div');
+    div.className = 'flow-log-vars';
+    div.innerHTML = vars.map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(String(v))}`).join('<br>');
+    flowLogBody.appendChild(div);
+  }
+  flowLogBody.scrollTop = flowLogBody.scrollHeight;
+}
+
+async function runFlowOnActiveTab(workspaceId, flowId) {
+  const flow = await (async () => {
+    const wsFlows = await getFlows(workspaceId);
+    return wsFlows.find(f => f.id === flowId);
+  })();
+  if (!flow) return;
+
+  // Stop existing runner
+  if (activeRunner && activeRunner.state === RunState.RUNNING) {
+    activeRunner.stop();
+  }
+
+  // Get active tab
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+
+  showFlowLog(flow.name);
+  flowLogState.textContent = 'running';
+  flowLogState.className = 'flow-state running';
+
+  const runner = new FlowRunner(flow, tab.id);
+  activeRunner = runner;
+
+  runner.onLog = appendFlowLog;
+  runner.onBlockStart = (block, i) => {
+    const def = BLOCK_TYPES[block.type];
+    appendFlowLog({ time: new Date().toISOString(), message: `▶ ${def?.label || block.type}` });
+  };
+
+  const result = await runner.run();
+  showFlowResult(result);
+}
+
+// Render flow chips for a workspace card
+function renderFlowChips(workspaceId, flows) {
+  if (!flows || flows.length === 0) {
+    return `
+      <div class="ws-flow-section">
+        <div class="ws-flow-header">
+          <span>Flows</span>
+          <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">+ New</button>
+        </div>
+      </div>`;
+  }
+
+  const chips = flows.map(f => `
+    <span class="flow-chip ${f.enabled ? '' : 'disabled'}">
+      <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="Edit">${escapeHtml(f.name)}</span>
+      <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="Run">&#9654;</span>
+      <span class="flow-delete" data-del-flow="${f.id}" data-ws="${workspaceId}" title="Delete">&times;</span>
+    </span>
+  `).join('');
+
+  return `
+    <div class="ws-flow-section">
+      <div class="ws-flow-header">
+        <span>Flows (${flows.length})</span>
+        <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">+ New</button>
+      </div>
+      <div>${chips}</div>
+    </div>`;
+}
+
+async function startRenameFlow(el, workspaceId, flowId) {
+  const chip = el.closest('.flow-chip');
+  const oldName = el.textContent;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.style.cssText = 'width:80px;font-size:11px;padding:0 4px;border:1px solid var(--primary);border-radius:3px;outline:none;';
+  el.replaceWith(input);
+  input.focus();
+  input.select();
+
+  const finish = async () => {
+    const newName = input.value.trim();
+    if (newName && newName !== oldName) {
+      const flow = await getFlowById(workspaceId, flowId);
+      if (flow) {
+        flow.name = newName;
+        await saveFlow(workspaceId, flow);
+      }
+    }
+    await renderList();
+  };
+
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = oldName; input.blur(); }
+  });
+}
+
+function openFlowEditor(workspaceId, flowId) {
+  location.href = `flow-editor.html?ws=${workspaceId}&flow=${flowId}`;
+}
+
+async function addNewFlow(workspaceId) {
+  const flow = createFlow('New Flow');
+  await saveFlow(workspaceId, flow);
+  openFlowEditor(workspaceId, flow.id);
+  await renderList();
+}
 
 // --- Init ---
 initColorPicker();

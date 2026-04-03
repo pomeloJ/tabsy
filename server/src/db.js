@@ -60,10 +60,19 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  -- Add flows column if not present (migration-safe)
+  -- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we handle this in JS below
+
   CREATE INDEX IF NOT EXISTS idx_workspaces_user ON workspaces(user_id);
   CREATE INDEX IF NOT EXISTS idx_tokens_user ON sync_tokens(user_id);
   CREATE INDEX IF NOT EXISTS idx_tokens_token ON sync_tokens(token);
   CREATE INDEX IF NOT EXISTS idx_deleted_ws_user ON deleted_workspaces(user_id);
 `);
+
+// Migration: add flows column if it doesn't exist
+const columns = db.prepare("PRAGMA table_info(workspaces)").all();
+if (!columns.find(c => c.name === 'flows')) {
+  db.exec("ALTER TABLE workspaces ADD COLUMN flows TEXT NOT NULL DEFAULT '[]'");
+}
 
 module.exports = db;
