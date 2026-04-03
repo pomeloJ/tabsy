@@ -13,7 +13,12 @@ Full specification is in SPEC.md — always consult it for data models, API cont
 
 ## Current Status
 
-Building v1.0.0 (sync foundation). Project directories created, implementation starting from scratch.
+v1.0.0 complete. All 11 milestones done — server, Web UI, and extension with full sync functionality.
+
+## Git Branching
+
+- `main` — stable releases
+- `dev` — active development
 
 ## Project Structure
 
@@ -21,23 +26,22 @@ Building v1.0.0 (sync foundation). Project directories created, implementation s
 tabsy/
 ├── extension/               — Chrome/Edge extension (Manifest V3, no build step)
 │   ├── manifest.json
-│   ├── background.js
-│   ├── sidepanel.html / .js
-│   ├── popup.html / .js     (reserved)
+│   ├── background.js        — service worker: badge updates, side panel open
+│   ├── sidepanel.html / .js — main UI: save/restore/list/sync
 │   ├── lib/
-│   │   ├── storage.js       — storage abstraction (local + remote)
-│   │   ├── sync.js          — sync logic
-│   │   └── api-client.js    — server API wrapper
+│   │   ├── storage.js       — chrome.storage.local CRUD + pending deletions
+│   │   ├── sync.js          — pull/push sync logic (LWW)
+│   │   └── api-client.js    — server API wrapper with Bearer token
 │   └── icons/
 │
 ├── server/                  — Node.js sync server + Web UI
 │   ├── package.json
 │   ├── .env                 — PORT, SESSION_SECRET, DB_PATH
 │   ├── src/
-│   │   ├── index.js         — entry point, Express + static files
-│   │   ├── db.js            — SQLite connection + schema init
+│   │   ├── index.js         — entry point, Express + CORS + static files
+│   │   ├── db.js            — SQLite connection + schema init (5 tables)
 │   │   ├── routes/
-│   │   │   ├── api.js       — /api/workspaces CRUD
+│   │   │   ├── api.js       — /api/workspaces CRUD + /api/sync/push & /api/sync/pull
 │   │   │   └── auth.js      — login, register, token management
 │   │   └── middleware/
 │   │       └── auth.js      — auth middleware (session + token dual mode)
@@ -45,9 +49,9 @@ tabsy/
 │       ├── index.html
 │       ├── css/style.css
 │       └── js/
-│           ├── app.js
-│           ├── api.js
-│           └── components/
+│           ├── app.js       — hash router + auth state
+│           ├── api.js       — fetch wrapper
+│           └── components/  — login, register, dashboard, settings
 │
 ├── CLAUDE.md
 └── SPEC.md
@@ -65,7 +69,7 @@ cd server && node src/index.js
 # Extension — no build step, load extension/ folder in edge://extensions/ or chrome://extensions/
 
 # Extension packaging
-cd extension && zip -r tabsy-extension.zip manifest.json background.js sidepanel.html sidepanel.js popup.html popup.js lib/ icons/
+cd extension && zip -r tabsy-extension.zip manifest.json background.js sidepanel.html sidepanel.js lib/ icons/
 ```
 
 ## Architecture
@@ -83,11 +87,21 @@ The auth middleware checks token first, then falls back to session. Sync tokens 
 - Sync uses Last-Write-Wins based on `savedAt` timestamps
 - `groups` and `tabs` are stored as JSON text columns in SQLite (not normalized)
 
+### Sync protocol
+- **Pull**: POST `/api/sync/pull` with `lastSyncAt` → returns updated workspaces + deleted IDs + `serverTime`
+- **Push**: POST `/api/sync/push` with `upsert[]` + `delete[]` → returns conflicts + `serverTime`
+- Extension tracks `syncStatus` per workspace: `synced | local_only | pending | conflict`
+- Extension tracks `pendingDeletions` in chrome.storage.local for deleted synced workspaces
+- Server tracks deletions in `deleted_workspaces` table for pull reporting
+
 ### Web UI routing
 Hash-based routing (`#/login`, `#/workspace/:id`) — no server-side routing needed. ES Modules loaded directly by the browser, no build tools.
 
 ### Extension marker mechanism
 Restored workspaces get a collapsed tab group with an `about:blank#ws-marker` tab at the front. This marker is auto-excluded when saving. Any code touching save/restore must preserve this behavior.
+
+### Database tables
+`users`, `sync_tokens`, `workspaces`, `deleted_workspaces`, plus session store (auto-managed by express-session)
 
 ## Key Conventions
 
@@ -97,18 +111,4 @@ Restored workspaces get a collapsed tab group with an `about:blank#ws-marker` ta
 - 10-color system shared between extension and Web UI — hex values and Chrome tabGroups color names defined in SPEC.md
 - Token format: `tb_` prefix + 32-char random hex
 - API responses use camelCase JSON keys; SQLite columns use snake_case
-- Server dependencies: express, better-sqlite3, bcrypt, express-session, better-sqlite3-session-store, uuid, nodemon (dev)
-
-## Development Milestones (v1.0.0)
-
-1. Server skeleton (Express + SQLite + schema init)
-2. User register/login API + session
-3. Sync Token CRUD API
-4. Workspace CRUD API
-5. Web UI — login/register pages
-6. Web UI — workspace overview (read-only)
-7. Web UI — settings page (token management)
-8. Extension — storage layer refactor (add UUID, storage adapter)
-9. Extension — settings UI (Server URL + Token)
-10. Extension — sync functionality (push/pull)
-11. Extension — sync status display
+- Server dependencies: express, better-sqlite3, bcrypt, express-session, better-sqlite3-session-store, dotenv; dev: nodemon
