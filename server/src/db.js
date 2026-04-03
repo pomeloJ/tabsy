@@ -1,0 +1,69 @@
+const path = require('path');
+const fs = require('fs');
+const Database = require('better-sqlite3');
+
+// Resolve DB_PATH relative to server/ root (parent of src/)
+const dbPath = process.env.DB_PATH || './data/tabsy.db';
+const resolvedPath = path.resolve(__dirname, '..', dbPath);
+
+// Auto-create the directory if it doesn't exist
+const dbDir = path.dirname(resolvedPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+const db = new Database(resolvedPath);
+
+// WAL mode for better concurrent read performance
+db.pragma('journal_mode = WAL');
+
+// Foreign key enforcement (SQLite has them OFF by default)
+db.pragma('foreign_keys = ON');
+
+// Schema initialization
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sync_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    name TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    last_used_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    saved_at TEXT NOT NULL,
+    groups TEXT NOT NULL DEFAULT '[]',
+    tabs TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS deleted_workspaces (
+    id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    deleted_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (id, user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_workspaces_user ON workspaces(user_id);
+  CREATE INDEX IF NOT EXISTS idx_tokens_user ON sync_tokens(user_id);
+  CREATE INDEX IF NOT EXISTS idx_tokens_token ON sync_tokens(token);
+  CREATE INDEX IF NOT EXISTS idx_deleted_ws_user ON deleted_workspaces(user_id);
+`);
+
+module.exports = db;

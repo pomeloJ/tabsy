@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Tabsy",
+  "version": "1.0.0",
+  "description": "Browser workspace management — save, restore, and sync tab workspaces",
+  "permissions": ["tabs", "tabGroups", "storage", "sidePanel"],
+  "host_permissions": ["http://*/api/*", "https://*/api/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Tabsy"
+  },
+  "icons": {
+    "128": "icons/icon.png"
+  }
+}

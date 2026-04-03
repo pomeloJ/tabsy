@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tabsy</title>
+  <style>
+    :root {
+      --primary: #0078d4;
+      --danger: #d13438;
+      --bg: #f5f5f5;
+      --surface: #ffffff;
+      --text: #1a1a1a;
+      --text-sec: #666;
+      --border: #e0e0e0;
+      --radius: 6px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    /* Current workspace banner */
+    .current-ws {
+      padding: 10px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-sec);
+    }
+    .current-ws .ws-label {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* Save section */
+    .save-section {
+      padding: 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .save-section input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .save-section input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    /* Color picker */
+    .color-picker {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .color-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color 0.1s;
+    }
+    .color-dot.selected {
+      border-color: var(--text);
+    }
+    .color-dot:hover {
+      opacity: 0.8;
+    }
+
+    /* Buttons */
+    .btn-row {
+      display: flex;
+      gap: 6px;
+    }
+    .btn {
+      flex: 1;
+      padding: 7px 0;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #106ebe; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-secondary:hover:not(:disabled) { background: #d0d0d0; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #a4262c; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; flex: none; }
+
+    /* Workspace list */
+    .list-header {
+      padding: 10px 12px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ws-card {
+      margin: 0 12px 8px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border-left: 3px solid var(--primary);
+      padding: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+    .ws-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .ws-card-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ws-card-name {
+      font-weight: 600;
+      font-size: 13px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ws-card-sync {
+      font-size: 10px;
+      flex-shrink: 0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+    .ws-card-sync.synced { color: #107c10; background: #e6f4e6; }
+    .ws-card-sync.local_only { color: #ca5010; background: #fff4e5; }
+    .ws-card-sync.pending { color: #0078d4; background: #e5f0fa; }
+    .ws-card-sync.conflict { color: #d13438; background: #fde7e9; }
+    .ws-card-meta {
+      font-size: 11px;
+      color: var(--text-sec);
+      margin-bottom: 6px;
+    }
+    .ws-card-actions {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+
+    /* Sync bar */
+    .sync-bar {
+      padding: 8px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sync-bar .btn { flex: none; }
+    .sync-status {
+      font-size: 11px;
+      color: var(--text-sec);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sync-status.ok { color: #107c10; }
+    .sync-status.err { color: var(--danger); }
+    .sync-spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Footer */
+    .footer {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .empty-state {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--text-sec);
+    }
+
+    /* Settings section */
+    .settings-toggle {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .settings-toggle:hover { background: #f0f0f0; }
+    .settings-toggle .arrow { transition: transform 0.15s; }
+    .settings-toggle .arrow.open { transform: rotate(90deg); }
+
+    .settings-panel {
+      display: none;
+      padding: 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .settings-panel.open { display: block; }
+    .settings-panel label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      margin-bottom: 4px;
+    }
+    .settings-panel input {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .settings-panel input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .settings-status {
+      font-size: 11px;
+      padding: 4px 0;
+      margin-bottom: 8px;
+    }
+    .settings-status.ok { color: #107c10; }
+    .settings-status.err { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <!-- Current workspace info -->
+  <div class="current-ws" id="current-ws">
+    <span class="ws-label" id="current-ws-label">No workspace detected</span>
+  </div>
+
+  <!-- Save section -->
+  <div class="save-section">
+    <input type="text" id="ws-name" placeholder="Workspace name">
+    <div class="color-picker" id="color-picker"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="save-btn">Save Window</button>
+      <button class="btn btn-secondary" id="save-all-btn">Save All</button>
+    </div>
+  </div>
+
+  <!-- Sync bar -->
+  <div class="sync-bar" id="sync-bar" style="display:none">
+    <button class="btn btn-primary btn-sm" id="sync-btn">Sync</button>
+    <span class="sync-status" id="sync-status"></span>
+  </div>
+
+  <!-- Workspace list -->
+  <div class="list-header">Saved Workspaces</div>
+  <div id="ws-list"></div>
+
+  <!-- Settings -->
+  <div class="settings-toggle" id="settings-toggle">
+    <span>Sync Settings</span>
+    <span class="arrow" id="settings-arrow">&#9654;</span>
+  </div>
+  <div class="settings-panel" id="settings-panel">
+    <label for="server-url">Server URL</label>
+    <input type="url" id="server-url" placeholder="http://localhost:3000">
+    <label for="sync-token">Sync Token</label>
+    <input type="text" id="sync-token" placeholder="tb_xxxxxxxxxxxx">
+    <div class="settings-status" id="settings-status"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-sm" id="save-settings-btn">Save</button>
+      <button class="btn btn-secondary btn-sm" id="test-conn-btn">Test</button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <button class="btn btn-danger btn-sm" id="clear-all-btn">Clear All</button>
+  </div>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
