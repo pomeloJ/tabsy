@@ -15,7 +15,7 @@ export function render(container) {
             <label for="password">Password</label>
             <input type="password" id="password" autocomplete="current-password" required>
           </div>
-          <button type="submit" class="btn btn-primary">Login</button>
+          <button type="submit" class="btn btn-primary btn-full">Login</button>
         </form>
         <div class="auth-footer">
           Don't have an account? <a href="#/register">Register</a>

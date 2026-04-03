@@ -51,15 +51,19 @@ const upsertWorkspace = db.prepare(`
 router.get('/workspaces', (req, res) => {
   const rows = listWorkspaces.all(req.userId);
   res.json({
-    workspaces: rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      color: r.color,
-      savedAt: r.saved_at,
-      updatedAt: r.updated_at,
-      tabCount: JSON.parse(r.tabs).length,
-      groupCount: JSON.parse(r.groups).length
-    }))
+    workspaces: rows.map(r => {
+      const groups = JSON.parse(r.groups);
+      return {
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        savedAt: r.saved_at,
+        updatedAt: r.updated_at,
+        tabCount: JSON.parse(r.tabs).length,
+        groupCount: groups.length,
+        groupSummary: groups.slice(0, 4).map(g => ({ title: g.title, color: g.color }))
+      };
+    })
   });
 });
 
