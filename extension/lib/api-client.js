@@ -40,7 +40,7 @@ export function getClockOffset() {
  * Returns { ok, status, data } or throws on network error.
  */
 async function request(path, options = {}) {
-  const { serverUrl, token } = await getSettings();
+  const { serverUrl, token, cfAccessClientId, cfAccessClientSecret } = await getSettings();
   if (!serverUrl) throw new Error('Server URL not configured');
   if (!token) throw new Error('Sync token not configured');
 
@@ -50,6 +50,12 @@ async function request(path, options = {}) {
     'Authorization': `Bearer ${token}`,
     ...options.headers
   };
+
+  // Cloudflare Access Service Token (optional)
+  if (cfAccessClientId && cfAccessClientSecret) {
+    headers['CF-Access-Client-Id'] = cfAccessClientId;
+    headers['CF-Access-Client-Secret'] = cfAccessClientSecret;
+  }
 
   const t1 = Date.now();
   const res = await fetch(url, { ...options, headers });

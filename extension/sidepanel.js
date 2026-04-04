@@ -663,9 +663,20 @@ const clientIdInput = document.getElementById('client-id');
 const copyClientIdBtn = document.getElementById('copy-client-id-btn');
 const serverUrlInput = document.getElementById('server-url');
 const syncTokenInput = document.getElementById('sync-token');
+const cfAccessToggle = document.getElementById('cf-access-toggle');
+const cfAccessArrow = document.getElementById('cf-access-arrow');
+const cfAccessPanel = document.getElementById('cf-access-panel');
+const cfClientIdInput = document.getElementById('cf-client-id');
+const cfClientSecretInput = document.getElementById('cf-client-secret');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const testConnBtn = document.getElementById('test-conn-btn');
 const settingsStatus = document.getElementById('settings-status');
+
+cfAccessToggle.addEventListener('click', () => {
+  const open = cfAccessPanel.style.display === 'none';
+  cfAccessPanel.style.display = open ? 'block' : 'none';
+  cfAccessArrow.style.transform = open ? 'rotate(90deg)' : '';
+});
 
 // Load and display client ID
 getClientId().then(id => { clientIdInput.value = id; });
@@ -685,7 +696,9 @@ settingsToggle.addEventListener('click', () => {
 saveSettingsBtn.addEventListener('click', async () => {
   const serverUrl = serverUrlInput.value.trim().replace(/\/+$/, '');
   const token = syncTokenInput.value.trim();
-  await saveSettings({ serverUrl, token });
+  const cfAccessClientId = cfClientIdInput.value.trim();
+  const cfAccessClientSecret = cfClientSecretInput.value.trim();
+  await saveSettings({ serverUrl, token, cfAccessClientId, cfAccessClientSecret });
   settingsStatus.textContent = t('settingsSaved');
   settingsStatus.className = 'settings-status ok';
 });
@@ -705,14 +718,23 @@ testConnBtn.addEventListener('click', async () => {
   settingsStatus.className = 'settings-status';
 
   try {
+    // Build CF Access headers if configured
+    const cfId = cfClientIdInput.value.trim();
+    const cfSecret = cfClientSecretInput.value.trim();
+    const cfHeaders = {};
+    if (cfId && cfSecret) {
+      cfHeaders['CF-Access-Client-Id'] = cfId;
+      cfHeaders['CF-Access-Client-Secret'] = cfSecret;
+    }
+
     // Test health endpoint
-    const healthRes = await fetch(`${serverUrl}/api/health`);
+    const healthRes = await fetch(`${serverUrl}/api/health`, { headers: cfHeaders });
     if (!healthRes.ok) throw new Error('Server not reachable');
 
     // Test token auth
     if (token) {
       const meRes = await fetch(`${serverUrl}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}`, ...cfHeaders }
       });
       if (!meRes.ok) throw new Error('Invalid token');
       const me = await meRes.json();
@@ -739,6 +761,8 @@ async function loadSettings() {
   const settings = await getSettings();
   serverUrlInput.value = settings.serverUrl || '';
   syncTokenInput.value = settings.token || '';
+  cfClientIdInput.value = settings.cfAccessClientId || '';
+  cfClientSecretInput.value = settings.cfAccessClientSecret || '';
 }
 
 // --- Auto-sync helper ---

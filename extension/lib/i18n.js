@@ -194,6 +194,10 @@ const locales = {
     browserId: 'Browser ID',
     copy: 'Copy',
     copied: 'Copied!',
+    // Cloudflare Access
+    cfAccessTitle: 'Cloudflare Access (Optional)',
+    cfAccessClientId: 'CF-Access-Client-Id',
+    cfAccessClientSecret: 'CF-Access-Client-Secret',
     // Language & Timezone
     language: 'Language',
     timezone: 'Timezone',
@@ -371,6 +375,10 @@ const locales = {
     browserId: '瀏覽器 ID',
     copy: '複製',
     copied: '已複製！',
+    // Cloudflare Access
+    cfAccessTitle: 'Cloudflare Access（選用）',
+    cfAccessClientId: 'CF-Access-Client-Id',
+    cfAccessClientSecret: 'CF-Access-Client-Secret',
     // Language & Timezone
     language: '語言',
     timezone: '時區',

@@ -154,7 +154,7 @@ export async function getConflicts() {
 // --- Sync Settings ---
 
 export async function getSettings() {
-  const { syncSettings = { serverUrl: '', token: '' } } = await chrome.storage.local.get('syncSettings');
+  const { syncSettings = { serverUrl: '', token: '', cfAccessClientId: '', cfAccessClientSecret: '' } } = await chrome.storage.local.get('syncSettings');
   return syncSettings;
 }
 
