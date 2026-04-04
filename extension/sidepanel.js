@@ -12,7 +12,12 @@ import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES, TRIGGER_TYPES } from './lib/flow-schema.js';
 import { mountFlowEditor, unmountFlowEditor } from './flow-editor.js';
 
-const MARKER_URL = 'about:blank#ws-marker';
+const MARKER_BASE = chrome.runtime.getURL('marker.html');
+function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
+function buildMarkerUrl(id, name, color) {
+  const p = new URLSearchParams({ id, name, color });
+  return `${MARKER_BASE}?${p}`;
+}
 const viewMain = document.getElementById('view-main');
 const viewFlow = document.getElementById('view-flow');
 
@@ -94,7 +99,7 @@ async function saveCurrentWindow() {
 // Detect the workspace ID for a given window (via marker tab)
 async function detectCurrentWorkspaceId(windowId) {
   const tabs = await chrome.tabs.query({ windowId });
-  const markerTab = tabs.find(t => t.url === MARKER_URL);
+  const markerTab = tabs.find(t => isMarkerUrl(t.url));
   if (!markerTab || markerTab.groupId === -1) return null;
 
   try {
@@ -116,7 +121,7 @@ async function saveAllWindows() {
     for (let i = 0; i < windows.length; i++) {
       const win = windows[i];
       const tabs = await chrome.tabs.query({ windowId: win.id });
-      const realTabs = tabs.filter(t => t.url !== MARKER_URL);
+      const realTabs = tabs.filter(t => !isMarkerUrl(t.url));
       if (realTabs.length === 0) continue;
 
       const name = `Window ${i + 1}`;
@@ -139,10 +144,11 @@ async function restoreWorkspace(workspace) {
   const newWin = await chrome.windows.create({ focused: true });
   const defaultTabId = newWin.tabs[0].id;
 
-  // Create marker tab first
+  // Create marker tab first (with workspace info)
+  const markerUrl = buildMarkerUrl(workspace.id, workspace.name, workspace.color);
   const markerTab = await chrome.tabs.create({
     windowId: newWin.id,
-    url: MARKER_URL,
+    url: markerUrl,
     active: false,
     index: 0
   });
@@ -208,7 +214,7 @@ async function detectCurrentWorkspace() {
   try {
     const win = await chrome.windows.getCurrent();
     const tabs = await chrome.tabs.query({ windowId: win.id });
-    const markerTab = tabs.find(t => t.url === MARKER_URL);
+    const markerTab = tabs.find(t => isMarkerUrl(t.url));
 
     if (!markerTab || markerTab.groupId === -1) {
       currentWorkspaceData = null;
@@ -231,7 +237,7 @@ async function detectCurrentWorkspace() {
 
     if (ws) {
       currentWorkspaceData = { id: ws.id, name: ws.name, color: ws.color };
-      const realTabs = tabs.filter(t => t.url !== MARKER_URL && (markerTab.groupId === -1 || t.groupId !== markerTab.groupId));
+      const realTabs = tabs.filter(t => !isMarkerUrl(t.url) && (markerTab.groupId === -1 || t.groupId !== markerTab.groupId));
       currentWsMeta.textContent = `${realTabs.length} tabs · ${formatTime(ws.savedAt)}`;
       currentWsMeta.style.display = 'block';
       currentWsActions.style.display = 'flex';

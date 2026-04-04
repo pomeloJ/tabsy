@@ -3,7 +3,8 @@ import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow, detectWorkspaceWindows, hasWorkspaceChanged } from './lib/capture.js';
 import { FlowRunner } from './lib/flow-runner.js';
 
-const MARKER_URL = 'about:blank#ws-marker';
+const MARKER_BASE = chrome.runtime.getURL('marker.html');
+function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
 const SYNC_ALARM_NAME = 'tabsy-auto-sync';
 const SYNC_INTERVAL_MINUTES = 0.5; // 30 seconds
 
@@ -134,7 +135,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 async function updateBadge(windowId) {
   try {
     const tabs = await chrome.tabs.query({ windowId });
-    const markerTab = tabs.find(t => t.url === MARKER_URL);
+    const markerTab = tabs.find(t => isMarkerUrl(t.url));
 
     if (!markerTab) {
       await chrome.action.setBadgeText({ text: '', windowId });

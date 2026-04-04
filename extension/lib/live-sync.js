@@ -1,4 +1,5 @@
-const MARKER_URL = 'about:blank#ws-marker';
+const MARKER_BASE = chrome.runtime.getURL('marker.html');
+function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
 
 /**
  * Apply merged workspace state to an open browser window.
@@ -18,10 +19,10 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
 
   // Get current browser tabs (excluding marker and its group)
   const allBrowserTabs = await chrome.tabs.query({ windowId });
-  const markerTab = allBrowserTabs.find(t => t.url === MARKER_URL);
+  const markerTab = allBrowserTabs.find(t => isMarkerUrl(t.url));
   const markerGroupId = markerTab?.groupId ?? -1;
   const currentTabs = allBrowserTabs.filter(t =>
-    t.url !== MARKER_URL && (markerGroupId === -1 || t.groupId !== markerGroupId)
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
   const mergedUrlSet = new Set(mergedTabs.map(t => t.url));
@@ -84,7 +85,7 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId) {
   // Get fresh tab list after opens/closes
   const allTabs = await chrome.tabs.query({ windowId });
   const liveTabs = allTabs.filter(t =>
-    t.url !== MARKER_URL && (markerGroupId === -1 || t.groupId !== markerGroupId)
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
   // Build URL → tab ID map (first occurrence wins for duplicates)
@@ -148,7 +149,7 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId) {
 async function syncPinnedState(windowId, mergedTabs, markerGroupId) {
   const allTabs = await chrome.tabs.query({ windowId });
   const liveTabs = allTabs.filter(t =>
-    t.url !== MARKER_URL && (markerGroupId === -1 || t.groupId !== markerGroupId)
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
   const mergedByUrl = new Map(mergedTabs.map(t => [t.url, t]));

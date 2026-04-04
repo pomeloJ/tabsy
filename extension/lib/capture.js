@@ -1,6 +1,7 @@
 import { generateId, getAll, getById } from './storage.js';
 
-const MARKER_URL = 'about:blank#ws-marker';
+const MARKER_BASE = chrome.runtime.getURL('marker.html');
+function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
 
 /**
  * Capture a window's tabs and groups into a workspace object.
@@ -10,12 +11,12 @@ export async function captureWindow(windowId, name, color, existingId = null) {
   const allTabs = await chrome.tabs.query({ windowId });
 
   // Find marker tab and its group
-  const markerTab = allTabs.find(t => t.url === MARKER_URL);
+  const markerTab = allTabs.find(t => isMarkerUrl(t.url));
   const markerGroupId = markerTab?.groupId ?? -1;
 
   // Filter out marker tab and all tabs in the marker group
   const tabs = allTabs.filter(t =>
-    t.url !== MARKER_URL && (markerGroupId === -1 || t.groupId !== markerGroupId)
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
   // Collect unique chrome group IDs (excluding ungrouped and marker group)
@@ -80,7 +81,7 @@ export async function detectWorkspaceWindows() {
 
   for (const win of windows) {
     const tabs = await chrome.tabs.query({ windowId: win.id });
-    const markerTab = tabs.find(t => t.url === MARKER_URL);
+    const markerTab = tabs.find(t => isMarkerUrl(t.url));
     if (!markerTab || markerTab.groupId === -1) continue;
 
     try {
