@@ -169,6 +169,23 @@ const locales = {
 
     // Language
     language: 'Language',
+
+    // Download page
+    download: 'Download',
+    loading: 'Loading',
+    extensionDownload: 'Extension Download',
+    downloadZip: 'Download ZIP',
+    failedToLoadVersion: 'Failed to load version info.',
+    installGuide: 'Installation Guide',
+    installStep1Title: 'Download the ZIP file',
+    installStep1Desc: 'Click the download button above to get the latest extension package.',
+    installStep2Title: 'Extract the ZIP',
+    installStep2Desc: 'Unzip the downloaded file to a permanent location (e.g. Documents/tabsy-extension). If updating, replace the old folder.',
+    installStep3Title: 'Open browser extensions page',
+    installStep3Desc: 'Go to edge://extensions (Edge) or chrome://extensions (Chrome), then enable "Developer mode" in the top-right corner.',
+    installStep4Title: 'Load the extension',
+    installStep4Desc: 'Click "Load unpacked" and select the extracted folder. If updating, click the reload button on the existing extension card instead.',
+    versionHistory: 'Version History',
   },
 
   'zh-TW': {
@@ -321,6 +338,23 @@ const locales = {
     you: '（你）',
 
     language: '語言',
+
+    // Download page
+    download: '下載',
+    loading: '載入中',
+    extensionDownload: '擴充功能下載',
+    downloadZip: '下載 ZIP',
+    failedToLoadVersion: '無法載入版本資訊。',
+    installGuide: '安裝說明',
+    installStep1Title: '下載 ZIP 檔案',
+    installStep1Desc: '點擊上方的下載按鈕，取得最新的擴充功能套件。',
+    installStep2Title: '解壓縮 ZIP',
+    installStep2Desc: '將下載的檔案解壓縮到固定位置（例如：文件/tabsy-extension）。若為更新，請直接覆蓋舊資料夾。',
+    installStep3Title: '開啟瀏覽器擴充功能頁面',
+    installStep3Desc: '前往 edge://extensions（Edge）或 chrome://extensions（Chrome），然後在右上角啟用「開發人員模式」。',
+    installStep4Title: '載入擴充功能',
+    installStep4Desc: '點擊「載入未封裝」並選取解壓縮的資料夾。若為更新，請改按現有擴充功能卡片上的重新載入按鈕。',
+    versionHistory: '版本紀錄',
   }
 };
 
