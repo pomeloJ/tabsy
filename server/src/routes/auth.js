@@ -1,11 +1,21 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                   // 10 attempts per window
+  message: { error: 'Too many attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Prepared statements — users
 const findUser = db.prepare('SELECT * FROM users WHERE username = ?');
@@ -35,7 +45,7 @@ const deleteToken = db.prepare('DELETE FROM sync_tokens WHERE id = ?');
 
 // POST /api/auth/register
 // Only allowed during initial setup (no users exist yet)
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   const { cnt } = countUsers.get();
   if (cnt > 0) {
     return res.status(403).json({ error: 'Registration is disabled. An admin account already exists.' });
@@ -68,7 +78,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -76,12 +86,11 @@ router.post('/login', async (req, res) => {
   }
 
   const user = findUser.get(username.trim());
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-
-  const match = await bcrypt.compare(password, user.password_hash);
-  if (!match) {
+  // Always run bcrypt.compare to prevent timing-based user enumeration.
+  // When user doesn't exist, compare against a dummy hash so response time is constant.
+  const dummyHash = '$2b$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
+  const match = await bcrypt.compare(password, user ? user.password_hash : dummyHash);
+  if (!user || !match) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 

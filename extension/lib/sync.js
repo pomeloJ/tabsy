@@ -3,6 +3,23 @@ import { syncPull, syncPush } from './api-client.js';
 import { threeWayMerge } from './merge.js';
 import { applyMergedState } from './live-sync.js';
 import { hasWorkspaceChanged } from './capture.js';
+import { hasDangerousBlocks } from './flow-schema.js';
+
+/**
+ * Strip codeTrusted from synced flows that contain dangerous blocks.
+ * Locally-created flows are trusted by default, but flows arriving from
+ * the server must be re-approved if they contain executable code.
+ */
+function sanitizeSyncedFlows(flows) {
+  if (!flows) return [];
+  return flows.map(f => {
+    if (hasDangerousBlocks(f)) {
+      const { codeTrusted, ...rest } = f;
+      return rest; // remove codeTrusted — user must re-approve
+    }
+    return f;
+  });
+}
 
 /**
  * Get/set lastSyncAt from chrome.storage.local
@@ -61,7 +78,7 @@ export async function performSync(openWorkspaceWindows = []) {
         serverWs.syncStatus = 'synced';
         serverWs.lastSyncAt = pullResult.serverTime;
         serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
-        if (!serverWs.flows) serverWs.flows = [];
+        serverWs.flows = sanitizeSyncedFlows(serverWs.flows || []);
         await save(serverWs);
         pulled++;
         continue;
@@ -69,8 +86,10 @@ export async function performSync(openWorkspaceWindows = []) {
 
       // Merge flows: server pull 不應該覆蓋 local 的 flows
       // 以 local flows 為主，server 有而 local 沒有的才加入
+      // 從 server 來的新 flow 若含 dangerous blocks，strip codeTrusted
       const mergedFlows = [...(localWs.flows || [])];
-      for (const sf of (serverWs.flows || [])) {
+      const sanitizedServerFlows = sanitizeSyncedFlows(serverWs.flows);
+      for (const sf of sanitizedServerFlows) {
         if (!mergedFlows.find(f => f.id === sf.id)) {
           mergedFlows.push(sf);
         }

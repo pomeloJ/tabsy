@@ -143,6 +143,10 @@ export async function injectCSS(tabId, css) {
 }
 
 export async function navigateTo(tabId, url) {
+  // Only allow http/https to prevent javascript: and data: URL injection
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(`Blocked navigation to unsafe URL scheme: ${url}`);
+  }
   await chrome.tabs.update(tabId, { url });
   return true;
 }
@@ -254,9 +258,10 @@ export async function showAlert(tabId, message) {
   return exec(tabId, (msg) => { alert(msg); return true; }, [message]);
 }
 
-// --- eval 表達式（在 extension context） ---
+// --- 安全表達式（在 extension context，不使用 eval / new Function） ---
+
+import { safeEval } from './safe-eval.js';
 
 export function evalExpression(expression, variables) {
-  const fn = new Function(...Object.keys(variables), `return (${expression})`);
-  return fn(...Object.values(variables));
+  return safeEval(expression, variables);
 }

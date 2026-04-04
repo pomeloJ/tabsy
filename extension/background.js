@@ -2,6 +2,7 @@ import { getAll, getById, save, getConflicts, getAutoSync } from './lib/storage.
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow, detectWorkspaceWindows, hasWorkspaceChanged } from './lib/capture.js';
 import { FlowRunner } from './lib/flow-runner.js';
+import { hasDangerousBlocks } from './lib/flow-schema.js';
 
 const MARKER_BASE = chrome.runtime.getURL('marker.html');
 function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
@@ -199,6 +200,12 @@ async function checkFlowTriggers(tabId, url, triggerType) {
         if (flow.trigger !== triggerType) continue;
         if (!flow.match) continue;
         if (!matchUrlPattern(flow.match, url)) continue;
+
+        // Block auto-trigger of untrusted flows with dangerous code
+        if (hasDangerousBlocks(flow) && !flow.codeTrusted) {
+          console.warn(`[Tabsy Flow] Skipped untrusted flow "${flow.name}" — contains dangerous blocks without code trust approval`);
+          continue;
+        }
 
         console.log(`[Tabsy Flow] Auto-trigger "${flow.name}" on ${url}`);
         try {

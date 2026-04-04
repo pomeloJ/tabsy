@@ -234,7 +234,8 @@ async function detectCurrentWorkspace() {
     const workspaces = await getAll();
     const ws = workspaces.find(w => w.name === wsName);
 
-    currentWsLabel.innerHTML = `<span style="color:${group.color}">📂</span> ${escapeHtml(wsName)}`;
+    const groupColor = /^[a-z]+$/.test(group.color) ? group.color : 'grey';
+    currentWsLabel.innerHTML = `<span style="color:${groupColor}">📂</span> ${escapeHtml(wsName)}`;
 
     if (ws) {
       currentWorkspaceData = { id: ws.id, name: ws.name, color: ws.color };
@@ -370,7 +371,7 @@ let _renderedOrder = []; // ordered workspace ids from last render
 function buildCardHtml(w, wsFlows) {
   return `
       <div class="ws-card-header">
-        <div class="ws-card-dot" style="background:${w.color}"></div>
+        <div class="ws-card-dot" style="background:${safeColor(w.color)}"></div>
         <div class="ws-card-name">${escapeHtml(w.name)}</div>
         ${syncBadge(w.syncStatus)}
       </div>
@@ -510,6 +511,10 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function safeColor(color) {
+  return /^#[0-9a-fA-F]{3,6}$/.test(color) ? color : '#69797e';
 }
 
 function getSyncLabels() {
