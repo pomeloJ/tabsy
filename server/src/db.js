@@ -26,6 +26,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
     created_at TEXT DEFAULT (datetime('now'))
   );
 
@@ -70,9 +71,17 @@ db.exec(`
 `);
 
 // Migration: add flows column if it doesn't exist
-const columns = db.prepare("PRAGMA table_info(workspaces)").all();
-if (!columns.find(c => c.name === 'flows')) {
+const wsColumns = db.prepare("PRAGMA table_info(workspaces)").all();
+if (!wsColumns.find(c => c.name === 'flows')) {
   db.exec("ALTER TABLE workspaces ADD COLUMN flows TEXT NOT NULL DEFAULT '[]'");
+}
+
+// Migration: add role column if it doesn't exist
+const userColumns = db.prepare("PRAGMA table_info(users)").all();
+if (!userColumns.find(c => c.name === 'role')) {
+  db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  // Promote the first user (lowest id) to admin
+  db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
 }
 
 module.exports = db;

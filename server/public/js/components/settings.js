@@ -1,9 +1,10 @@
 import { api } from '../api.js';
 import { t, getLocale, setLocale, getAvailableLocales } from '../i18n.js';
 
-export async function render(container) {
+export async function render(container, currentUser) {
   const locales = getAvailableLocales();
   const currentLocale = getLocale();
+  const isAdmin = currentUser && currentUser.role === 'admin';
 
   container.innerHTML = `
     <div class="page-header">
@@ -36,6 +37,25 @@ export async function render(container) {
 
       <div id="token-list"></div>
     </section>
+
+    ${isAdmin ? `
+    <section class="settings-section">
+      <h2>${t('userManagement')}</h2>
+      <p class="settings-desc">${t('userManagementDesc')}</p>
+
+      <div class="token-create-form" id="add-user-form">
+        <input type="text" id="new-username" class="search-input" placeholder="${t('usernamePlaceholder')}" style="flex:1">
+        <input type="password" id="new-password" class="search-input" placeholder="${t('passwordPlaceholder')}" style="flex:1">
+        <select id="new-role" class="search-input" style="max-width:140px">
+          <option value="user">${t('roleUser')}</option>
+          <option value="admin">${t('roleAdmin')}</option>
+        </select>
+        <button class="btn btn-primary btn-inline" id="add-user-btn">${t('addUser')}</button>
+      </div>
+
+      <div id="user-list"></div>
+    </section>
+    ` : ''}
   `;
 
   // --- Language selector ---
@@ -131,6 +151,120 @@ export async function render(container) {
   });
 
   await loadTokens();
+
+  // === Admin: User Management ===
+  if (!isAdmin) return;
+
+  const userListEl = container.querySelector('#user-list');
+  const addUserBtn = container.querySelector('#add-user-btn');
+  const newUsernameInput = container.querySelector('#new-username');
+  const newPasswordInput = container.querySelector('#new-password');
+  const newRoleSelect = container.querySelector('#new-role');
+
+  async function loadUsers() {
+    const { ok, data } = await api.get('/auth/users');
+    if (!ok) {
+      userListEl.innerHTML = `<p class="empty-state">${t('failedToLoadUsers')}</p>`;
+      return;
+    }
+    renderUsers(data.users);
+  }
+
+  function renderUsers(users) {
+    if (users.length <= 1) {
+      userListEl.innerHTML = `<p class="empty-state">${t('noOtherUsers')}</p>`;
+      return;
+    }
+
+    userListEl.innerHTML = `
+      <table class="token-table">
+        <thead>
+          <tr>
+            <th>${t('usernamePlaceholder')}</th>
+            <th>${t('role')}</th>
+            <th>${t('createdAt')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${escapeHtml(u.username)} ${u.id === currentUser.id ? `<span style="color:var(--color-text-tertiary)">${t('you')}</span>` : ''}</td>
+              <td>${u.role === 'admin' ? t('roleAdmin') : t('roleUser')}</td>
+              <td>${formatTime(u.createdAt)}</td>
+              <td>
+                ${u.id !== currentUser.id ? `
+                  <button class="btn btn-ghost btn-sm" data-reset-pw="${u.id}" data-username="${escapeHtml(u.username)}">${t('resetPassword')}</button>
+                  <button class="btn btn-danger btn-sm" data-delete-user="${u.id}" data-username="${escapeHtml(u.username)}">${t('deleteUser')}</button>
+                ` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Reset password handlers
+    userListEl.querySelectorAll('[data-reset-pw]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.username;
+        const newPw = prompt(t('resetPasswordPrompt', { name }));
+        if (!newPw) return;
+        if (newPw.length < 6) {
+          alert(t('failedToResetPassword'));
+          return;
+        }
+        btn.disabled = true;
+        const { ok } = await api.put(`/auth/users/${btn.dataset.resetPw}/password`, { password: newPw });
+        btn.disabled = false;
+        if (ok) {
+          alert(t('passwordResetSuccess'));
+        } else {
+          alert(t('failedToResetPassword'));
+        }
+      });
+    });
+
+    // Delete user handlers
+    userListEl.querySelectorAll('[data-delete-user]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.username;
+        if (!confirm(t('deleteUserConfirm', { name }))) return;
+        btn.disabled = true;
+        const { ok } = await api.del(`/auth/users/${btn.dataset.deleteUser}`);
+        if (ok) {
+          await loadUsers();
+        } else {
+          btn.disabled = false;
+          alert(t('failedToDeleteUser'));
+        }
+      });
+    });
+  }
+
+  // Add user handler
+  addUserBtn.addEventListener('click', async () => {
+    const username = newUsernameInput.value.trim();
+    const password = newPasswordInput.value;
+    const role = newRoleSelect.value;
+
+    if (!username || !password) return;
+
+    addUserBtn.disabled = true;
+    const { ok, data } = await api.post('/auth/users', { username, password, role });
+    addUserBtn.disabled = false;
+
+    if (ok) {
+      newUsernameInput.value = '';
+      newPasswordInput.value = '';
+      newRoleSelect.value = 'user';
+      await loadUsers();
+    } else {
+      alert(data?.error || t('failedToCreateUser'));
+    }
+  });
+
+  await loadUsers();
 }
 
 function escapeHtml(str) {

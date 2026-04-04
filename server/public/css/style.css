@@ -271,6 +271,16 @@ body {
 }
 
 /* === Auth Forms === */
+/* Guest: hide sidebar/bottomnav, center main */
+body.guest .sidebar {
+  display: none;
+}
+
+body.guest .main {
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .auth-container {
   max-width: 400px;
   margin: 60px auto 0;
@@ -1560,12 +1570,4 @@ body {
     display: none;
   }
 
-  /* Auth pages don't need sidebar */
-  body.guest .sidebar {
-    display: none;
-  }
-
-  body.guest .main {
-    margin-left: 0;
-  }
 }

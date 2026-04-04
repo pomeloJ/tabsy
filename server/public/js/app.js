@@ -2,6 +2,7 @@ import { api } from './api.js';
 import { t, setLocale, getLocale, getAvailableLocales, initLocale } from './i18n.js';
 import { render as renderLogin } from './components/login.js';
 import { render as renderRegister } from './components/register.js';
+import { render as renderSetup } from './components/setup.js';
 import { render as renderDashboard } from './components/dashboard.js';
 import { render as renderSettings } from './components/settings.js';
 import { render as renderWorkspace } from './components/workspace.js';
@@ -18,6 +19,14 @@ const topbarMenu = document.getElementById('topbar-menu');
 const bottomnav = document.getElementById('bottomnav');
 
 let currentUser = null;
+let needsSetup = false;
+
+// --- Setup check ---
+async function checkSetup() {
+  const { ok, data } = await api.get('/auth/setup-status');
+  needsSetup = ok && data.needsSetup;
+  return needsSetup;
+}
 
 // --- Auth state ---
 async function checkAuth() {
@@ -114,7 +123,7 @@ const guestRoutes = {
 
 const authRoutes = {
   '#/': renderDashboard,
-  '#/settings': renderSettings
+  '#/settings': (el) => renderSettings(el, currentUser)
 };
 
 // Dynamic route patterns
@@ -127,6 +136,23 @@ const dynamicAuthRoutes = [
 
 async function route() {
   const hash = location.hash || '#/';
+
+  // Setup wizard takes priority
+  if (needsSetup) {
+    if (hash !== '#/setup') {
+      location.hash = '#/setup';
+      return;
+    }
+    renderSetup(appEl);
+    updateActiveNav();
+    return;
+  }
+
+  // If setup is done, block #/setup access
+  if (hash === '#/setup') {
+    location.hash = currentUser ? '#/' : '#/login';
+    return;
+  }
 
   // Guest routes
   if (guestRoutes[hash]) {
@@ -183,6 +209,7 @@ function updateTopbarTitle(hash) {
 // --- Init ---
 window.addEventListener('hashchange', route);
 window.addEventListener('auth-changed', async () => {
+  await checkSetup();
   await checkAuth();
   route();
 });
@@ -201,10 +228,15 @@ window.addEventListener('locale-changed', () => {
   route();
 });
 
+await checkSetup();
 await checkAuth();
 applyI18n();
 if (!location.hash || location.hash === '#') {
-  location.hash = currentUser ? '#/' : '#/login';
+  if (needsSetup) {
+    location.hash = '#/setup';
+  } else {
+    location.hash = currentUser ? '#/' : '#/login';
+  }
 }
 route();
 
