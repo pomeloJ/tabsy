@@ -1,4 +1,5 @@
 import { api } from './api.js';
+import { t, setLocale, getLocale, getAvailableLocales, initLocale } from './i18n.js';
 import { render as renderLogin } from './components/login.js';
 import { render as renderRegister } from './components/register.js';
 import { render as renderDashboard } from './components/dashboard.js';
@@ -33,11 +34,11 @@ function updateNav() {
     sidebarNav.innerHTML = `
       <a href="#/" class="sidebar-link" data-route="/">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Workspaces
+        ${t('workspaces')}
       </a>
       <a href="#/settings" class="sidebar-link" data-route="/settings">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-        Settings
+        ${t('settings')}
       </a>
     `;
 
@@ -45,7 +46,7 @@ function updateNav() {
       <div class="sidebar-user">${escapeHtml(currentUser.username)}</div>
       <button class="sidebar-logout" id="logout-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Logout
+        ${t('logout')}
       </button>
     `;
 
@@ -171,9 +172,9 @@ async function route() {
 
 function updateTopbarTitle(hash) {
   if (hash.startsWith('#/workspace/')) {
-    topbarTitle.textContent = 'Workspace';
+    topbarTitle.textContent = t('workspace');
   } else if (hash === '#/settings') {
-    topbarTitle.textContent = 'Settings';
+    topbarTitle.textContent = t('settings');
   } else {
     topbarTitle.textContent = 'Tabsy';
   }
@@ -186,7 +187,22 @@ window.addEventListener('auth-changed', async () => {
   route();
 });
 
+// Apply i18n to static elements
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+}
+
+// Listen for locale changes
+window.addEventListener('locale-changed', () => {
+  applyI18n();
+  updateNav();
+  route();
+});
+
 await checkAuth();
+applyI18n();
 if (!location.hash || location.hash === '#') {
   location.hash = currentUser ? '#/' : '#/login';
 }

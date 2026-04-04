@@ -6,6 +6,7 @@ import { BLOCK_TYPES, BLOCK_CATEGORIES, CONDITION_TYPES, TRIGGER_TYPES,
          createFlow, createBlock, interpolate } from './lib/flow-schema.js';
 import { getFlows, saveFlow, getFlowById } from './lib/storage.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
+import { t, initLocale } from './lib/i18n.js';
 
 // --- State ---
 let flow = null;
@@ -50,6 +51,19 @@ let _mounted = false;
 let _eventsAttached = false;
 
 async function init(wsId, fId) {
+  // Ensure locale is loaded (needed for standalone flow-editor.html)
+  await initLocale();
+  // Apply i18n to static HTML elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+
   workspaceId = wsId;
   if (wsId && fId) {
     const f = await getFlowById(wsId, fId);
@@ -58,7 +72,7 @@ async function init(wsId, fId) {
     }
   }
   if (!flow) {
-    flow = createFlow('New Flow');
+    flow = createFlow();
   }
 
   await loadFlowToUI();
@@ -183,7 +197,7 @@ async function loadFlowToUI() {
 }
 
 function readFlowFromUI() {
-  flow.name = flowNameInput.value.trim() || 'Untitled';
+  flow.name = flowNameInput.value.trim() || t('untitled');
   flow.trigger = flowTrigger.value;
   flow.match = flowMatch.value.trim();
   flow.enabled = flowEnabled.checked;
@@ -238,12 +252,12 @@ function renderBlockCard(block, parentBlocks, index, path) {
   const header = document.createElement('div');
   header.className = 'block-header';
   header.innerHTML = `
-    <span class="block-drag-handle" title="Drag to reorder">&#x2630;</span>
+    <span class="block-drag-handle" title="${t('dragToReorder')}">&#x2630;</span>
     <span class="block-label">${def.label}</span>
     <span class="block-summary">${getBlockSummary(block)}</span>
     <div class="block-actions">
-      <button class="block-action-btn duplicate" title="Duplicate">&#x2398;</button>
-      <button class="block-action-btn delete" title="Delete">&times;</button>
+      <button class="block-action-btn duplicate" title="${t('duplicate')}">&#x2398;</button>
+      <button class="block-action-btn delete" title="${t('delete')}">&times;</button>
     </div>
   `;
 
@@ -295,30 +309,30 @@ function renderBlockFields(container, block, def) {
 
     case 'fill':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'value', 'Value'));
-      container.appendChild(checkboxField(block, 'clearFirst', 'Clear first'));
+      container.appendChild(textField(block, 'value', t('value')));
+      container.appendChild(checkboxField(block, 'clearFirst', t('clearFirst')));
       break;
 
     case 'select':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'value', 'Value'));
+      container.appendChild(textField(block, 'value', t('value')));
       break;
 
     case 'check':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(checkboxField(block, 'checked', 'Checked'));
+      container.appendChild(checkboxField(block, 'checked', t('checked')));
       break;
 
     case 'set_attribute':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'attribute', 'Attribute'));
-      container.appendChild(textField(block, 'value', 'Value'));
+      container.appendChild(textField(block, 'attribute', t('attribute')));
+      container.appendChild(textField(block, 'value', t('value')));
       break;
 
     case 'add_class':
     case 'remove_class':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'className', 'Class'));
+      container.appendChild(textField(block, 'className', t('className')));
       break;
 
     case 'inject_css':
@@ -332,64 +346,64 @@ function renderBlockFields(container, block, def) {
     case 'wait_element':
     case 'wait_hidden':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(numberField(block, 'timeout', 'Timeout (ms)'));
+      container.appendChild(numberField(block, 'timeout', t('timeoutMs')));
       break;
 
     case 'delay':
-      container.appendChild(numberField(block, 'ms', 'Delay (ms)'));
+      container.appendChild(numberField(block, 'ms', t('delayMs')));
       break;
 
     case 'get_text':
     case 'get_value':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'variable', 'Save to var'));
+      container.appendChild(textField(block, 'variable', t('saveToVar')));
       break;
 
     case 'get_attribute':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'attribute', 'Attribute'));
-      container.appendChild(textField(block, 'variable', 'Save to var'));
+      container.appendChild(textField(block, 'attribute', t('attribute')));
+      container.appendChild(textField(block, 'variable', t('saveToVar')));
       break;
 
     case 'set_variable':
-      container.appendChild(textField(block, 'variable', 'Variable'));
-      container.appendChild(textField(block, 'value', 'Value'));
+      container.appendChild(textField(block, 'variable', t('variable')));
+      container.appendChild(textField(block, 'value', t('value')));
       break;
 
     case 'eval_expression':
-      container.appendChild(textareaField(block, 'expression', 'Expression'));
-      container.appendChild(textField(block, 'variable', 'Save to var'));
+      container.appendChild(textareaField(block, 'expression', t('expression')));
+      container.appendChild(textField(block, 'variable', t('saveToVar')));
       break;
 
     case 'log':
     case 'alert':
-      container.appendChild(textField(block, 'message', 'Message'));
+      container.appendChild(textField(block, 'message', t('message')));
       break;
 
     case 'run_script':
-      container.appendChild(textareaField(block, 'code', 'JavaScript'));
+      container.appendChild(textareaField(block, 'code', t('javascript')));
       break;
 
     case 'if':
       container.appendChild(conditionEditor(block));
-      container.appendChild(nestedBlocksEditor(block, 'then', 'Then'));
-      container.appendChild(nestedBlocksEditor(block, 'else', 'Else'));
+      container.appendChild(nestedBlocksEditor(block, 'then', t('thenBranch')));
+      container.appendChild(nestedBlocksEditor(block, 'else', t('elseBranch')));
       break;
 
     case 'loop':
-      container.appendChild(numberField(block, 'times', 'Repeat'));
-      container.appendChild(nestedBlocksEditor(block, 'body', 'Body'));
+      container.appendChild(numberField(block, 'times', t('repeat')));
+      container.appendChild(nestedBlocksEditor(block, 'body', t('body')));
       break;
 
     case 'loop_elements':
       container.appendChild(selectorField(block, 'selector'));
-      container.appendChild(textField(block, 'itemVariable', 'Item var'));
-      container.appendChild(nestedBlocksEditor(block, 'body', 'Body'));
+      container.appendChild(textField(block, 'itemVariable', t('itemVar')));
+      container.appendChild(nestedBlocksEditor(block, 'body', t('body')));
       break;
 
     case 'try_catch':
-      container.appendChild(nestedBlocksEditor(block, 'try', 'Try'));
-      container.appendChild(nestedBlocksEditor(block, 'catch', 'Catch'));
+      container.appendChild(nestedBlocksEditor(block, 'try', t('tryBranch')));
+      container.appendChild(nestedBlocksEditor(block, 'catch', t('catchBranch')));
       break;
   }
 }
@@ -399,7 +413,7 @@ function renderBlockFields(container, block, def) {
 function selectorField(block, key) {
   const row = document.createElement('div');
   row.className = 'field-row';
-  row.innerHTML = `<label>Selector</label>`;
+  row.innerHTML = `<label>${t('selector')}</label>`;
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -411,7 +425,7 @@ function selectorField(block, key) {
   const pickerBtn = document.createElement('button');
   pickerBtn.className = 'picker-btn';
   pickerBtn.textContent = '\uD83C\uDFAF';
-  pickerBtn.title = 'Pick element from page';
+  pickerBtn.title = t('pickElement');
   pickerBtn.addEventListener('click', () => startElementPicker(input, pickerBtn));
   row.appendChild(pickerBtn);
 
@@ -480,7 +494,7 @@ function conditionEditor(block) {
   // Condition type selector
   const typeRow = document.createElement('div');
   typeRow.className = 'field-row';
-  typeRow.innerHTML = `<label>Condition</label>`;
+  typeRow.innerHTML = `<label>${t('condition')}</label>`;
   const sel = document.createElement('select');
   for (const [type, def] of Object.entries(CONDITION_TYPES)) {
     const opt = document.createElement('option');
@@ -505,9 +519,9 @@ function conditionEditor(block) {
       } else {
         const row = document.createElement('div');
         row.className = 'field-row';
-        const label = pkey === 'text' ? 'Text' : pkey === 'pattern' ? 'Pattern' :
-                      pkey === 'variable' ? 'Variable' : pkey === 'value' ? 'Value' :
-                      pkey === 'code' ? 'Expression' : pkey;
+        const label = pkey === 'text' ? t('text') : pkey === 'pattern' ? t('pattern') :
+                      pkey === 'variable' ? t('variable') : pkey === 'value' ? t('value') :
+                      pkey === 'code' ? t('expression') : pkey;
         row.innerHTML = `<label>${label}</label>`;
         const input = document.createElement(pkey === 'code' ? 'textarea' : 'input');
         input.type = 'text';
@@ -525,7 +539,7 @@ function conditionEditor(block) {
 function selectorFieldForObj(obj, key) {
   const row = document.createElement('div');
   row.className = 'field-row';
-  row.innerHTML = `<label>Selector</label>`;
+  row.innerHTML = `<label>${t('selector')}</label>`;
   const input = document.createElement('input');
   input.type = 'text';
   input.value = obj[key] || '';
@@ -536,7 +550,7 @@ function selectorFieldForObj(obj, key) {
   const pickerBtn = document.createElement('button');
   pickerBtn.className = 'picker-btn';
   pickerBtn.textContent = '\uD83C\uDFAF';
-  pickerBtn.title = 'Pick element from page';
+  pickerBtn.title = t('pickElement');
   pickerBtn.addEventListener('click', () => startElementPicker(input, pickerBtn));
   row.appendChild(pickerBtn);
 
@@ -622,7 +636,7 @@ function updateSummaries() {
 function createAddButton(targetBlocks, insertIndex) {
   const btn = document.createElement('button');
   btn.className = 'add-block-btn';
-  btn.innerHTML = '+ Add Block';
+  btn.innerHTML = t('addBlock');
   btn.addEventListener('click', () => openPicker(targetBlocks, insertIndex));
   return btn;
 }
@@ -784,7 +798,7 @@ function renderVars() {
 async function startElementPicker(inputEl, btnEl) {
   const currentTab = await findTargetTab();
   if (!currentTab) {
-    alert('No target tab found. Open a web page in this window first.');
+    alert(t('noTargetTab'));
     return;
   }
 
@@ -804,7 +818,7 @@ async function startElementPicker(inputEl, btnEl) {
     }
   } catch (err) {
     console.error('Element picker failed:', err);
-    alert('Cannot pick element on this page. Try a different tab.');
+    alert(t('cannotPickElement'));
   }
 
   btnEl.classList.remove('active');

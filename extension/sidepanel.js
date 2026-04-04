@@ -11,6 +11,7 @@ import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES, TRIGGER_TYPES } from './lib/flow-schema.js';
 import { mountFlowEditor, unmountFlowEditor } from './flow-editor.js';
+import { t, initLocale, setLocale, getLocale } from './lib/i18n.js';
 
 const MARKER_BASE = chrome.runtime.getURL('marker.html');
 function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
@@ -218,7 +219,7 @@ async function detectCurrentWorkspace() {
 
     if (!markerTab || markerTab.groupId === -1) {
       currentWorkspaceData = null;
-      currentWsLabel.textContent = 'No workspace detected';
+      currentWsLabel.textContent = t('noWorkspaceDetected');
       currentWsMeta.style.display = 'none';
       currentWsActions.style.display = 'none';
       currentWsFlows.style.display = 'none';
@@ -257,7 +258,7 @@ async function detectCurrentWorkspace() {
     }
   } catch {
     currentWorkspaceData = null;
-    currentWsLabel.textContent = 'No workspace detected';
+    currentWsLabel.textContent = t('noWorkspaceDetected');
     currentWsMeta.style.display = 'none';
     currentWsActions.style.display = 'none';
     currentWsFlows.style.display = 'none';
@@ -285,7 +286,7 @@ async function quickSaveCurrentWorkspace() {
 // --- Quick delete current workspace ---
 async function quickDeleteCurrentWorkspace() {
   if (!currentWorkspaceData) return;
-  if (!confirm(`Delete "${currentWorkspaceData.name}"?`)) return;
+  if (!confirm(t('deleteConfirm', { name: currentWorkspaceData.name }))) return;
   quickDeleteBtn.disabled = true;
   try {
     await remove(currentWorkspaceData.id);
@@ -305,8 +306,8 @@ function renderCurrentWsFlows(ws) {
   const triggerLabel = (t) => TRIGGER_TYPES[t]?.label || t;
 
   let html = `<div class="flow-list-header">
-    <span>Flows${flows.length ? ` (${flows.length})` : ''}</span>
-    <button class="btn btn-sm btn-secondary" data-add-flow="${ws.id}">+ New</button>
+    <span>${t('flows')}${flows.length ? ` (${flows.length})` : ''}</span>
+    <button class="btn btn-sm btn-secondary" data-add-flow="${ws.id}">${t('newFlow')}</button>
   </div>`;
 
   if (flows.length > 0) {
@@ -315,12 +316,12 @@ function renderCurrentWsFlows(ws) {
       return `
       <div class="flow-item ${f.enabled ? '' : 'disabled'}">
         <span class="flow-item-name" data-edit-flow="${f.id}" data-ws="${ws.id}">${escapeHtml(f.name)}</span>
-        ${urlMatched ? '<span class="flow-match-badge" title="Matches current tab">&#9889; match</span>' : ''}
+        ${urlMatched ? `<span class="flow-match-badge" title="Matches current tab">&#9889; ${t('match')}</span>` : ''}
         <span class="flow-item-trigger ${f.trigger}">${triggerLabel(f.trigger)}</span>
         <span class="flow-item-actions">
-          <button class="flow-item-btn run" data-run-flow="${f.id}" data-ws="${ws.id}" title="Run">&#9654;</button>
-          <button class="flow-item-btn edit" data-edit-flow="${f.id}" data-ws="${ws.id}" title="Edit">&#9998;</button>
-          <button class="flow-item-btn delete" data-del-flow="${f.id}" data-ws="${ws.id}" title="Delete">&times;</button>
+          <button class="flow-item-btn run" data-run-flow="${f.id}" data-ws="${ws.id}" title="${t('run')}">&#9654;</button>
+          <button class="flow-item-btn edit" data-edit-flow="${f.id}" data-ws="${ws.id}" title="${t('edit')}">&#9998;</button>
+          <button class="flow-item-btn delete" data-del-flow="${f.id}" data-ws="${ws.id}" title="${t('delete')}">&times;</button>
         </span>
       </div>`;
     }).join('');
@@ -343,7 +344,7 @@ currentWsFlows.addEventListener('click', async (e) => {
     runFlowOnActiveTab(target.dataset.ws, target.dataset.runFlow);
   } else if (target.dataset.delFlow) {
     e.stopPropagation();
-    if (!confirm('Delete this flow?')) return;
+    if (!confirm(t('deleteFlowConfirm'))) return;
     await removeFlow(target.dataset.ws, target.dataset.delFlow);
     await renderList();
     await detectCurrentWorkspace();
@@ -379,8 +380,8 @@ function buildCardHtml(w, wsFlows) {
       ${renderConflictSection(w)}
       ${renderFlowChips(w.id, wsFlows)}
       <div class="ws-card-actions">
-        <button class="btn btn-primary btn-sm" data-restore="${w.id}">Restore</button>
-        <button class="btn btn-danger btn-sm" data-delete="${w.id}">Delete</button>
+        <button class="btn btn-primary btn-sm" data-restore="${w.id}">${t('restore')}</button>
+        <button class="btn btn-danger btn-sm" data-delete="${w.id}">${t('delete')}</button>
       </div>`;
 }
 
@@ -392,15 +393,15 @@ async function renderList() {
   const workspaces = allWorkspaces.filter(w => w.id !== currentId);
 
   // Update other-ws toggle title
-  const sectionLabel = currentId ? 'Other Workspaces' : 'Saved Workspaces';
+  const sectionLabel = currentId ? t('otherWorkspaces') : t('savedWorkspaces');
   otherWsTitle.textContent = workspaces.length > 0
     ? `${sectionLabel} (${workspaces.length})`
     : sectionLabel;
 
   if (workspaces.length === 0) {
     wsList.innerHTML = currentId
-      ? '<div class="empty-state">No other workspaces.</div>'
-      : '<div class="empty-state">No saved workspaces.</div>';
+      ? `<div class="empty-state">${t('noOtherWorkspaces')}</div>`
+      : `<div class="empty-state">${t('noSavedWorkspaces')}</div>`;
     _renderedCards.clear();
     _renderedOrder = [];
     return;
@@ -472,7 +473,7 @@ wsList.addEventListener('click', async (e) => {
     target.disabled = false;
   } else if (target.dataset.delete) {
     const ws = await getById(target.dataset.delete);
-    if (!confirm(`Delete "${ws?.name}"?`)) return;
+    if (!confirm(t('deleteConfirm', { name: ws?.name }))) return;
     await remove(target.dataset.delete);
     await renderList();
     triggerAutoSync();
@@ -488,7 +489,7 @@ wsList.addEventListener('click', async (e) => {
     runFlowOnActiveTab(target.dataset.ws, target.dataset.runFlow);
   } else if (target.dataset.delFlow) {
     e.stopPropagation();
-    if (!confirm('Delete this flow?')) return;
+    if (!confirm(t('deleteFlowConfirm'))) return;
     await removeFlow(target.dataset.ws, target.dataset.delFlow);
     await renderList();
   } else if (target.dataset.addFlow) {
@@ -511,16 +512,19 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-const SYNC_LABELS = {
-  synced: '&#x2713; Synced',
-  local_only: '&#x25cf; Local',
-  pending: '&#x21bb; Pending',
-  conflict: '&#x26a0; Conflict'
-};
+function getSyncLabels() {
+  return {
+    synced: t('syncedBadge'),
+    local_only: t('localBadge'),
+    pending: t('pendingBadge'),
+    conflict: t('conflictBadge')
+  };
+}
 
 function syncBadge(status) {
   if (!status) return '';
-  const label = SYNC_LABELS[status];
+  const labels = getSyncLabels();
+  const label = labels[status];
   if (!label) return '';
   return `<span class="ws-card-sync ${status}">${label}</span>`;
 }
@@ -541,18 +545,22 @@ function renderConflictSection(workspace) {
   const remoteTabCount = cd.remoteVersion.tabs.length;
   const conflictCount = cd.conflicts ? cd.conflicts.length : 0;
 
+  const conflictDetail = conflictCount > 0
+    ? (conflictCount > 1 ? t('tabConflictsPlural', { n: conflictCount }) : t('tabConflicts', { n: conflictCount }))
+    : '';
+
   return `
     <div class="ws-conflict-section">
       <div class="conflict-summary">
-        <span class="conflict-label">Sync conflict</span>
+        <span class="conflict-label">${t('syncConflict')}</span>
         <span class="conflict-detail">
-          Local: ${localTabCount} tabs · Remote: ${remoteTabCount} tabs${conflictCount > 0 ? ` · ${conflictCount} tab conflict${conflictCount > 1 ? 's' : ''}` : ''}
+          ${t('localLabel')}: ${localTabCount} tabs · ${t('remoteLabel')}: ${remoteTabCount} tabs${conflictDetail ? ` · ${conflictDetail}` : ''}
         </span>
       </div>
       <div class="conflict-actions">
-        <button class="btn btn-sm btn-secondary" data-resolve="${workspace.id}" data-action="local">Keep Local</button>
-        <button class="btn btn-sm btn-secondary" data-resolve="${workspace.id}" data-action="remote">Keep Remote</button>
-        <button class="btn btn-sm btn-primary" data-resolve="${workspace.id}" data-action="merge">Merge All</button>
+        <button class="btn btn-sm btn-secondary" data-resolve="${workspace.id}" data-action="local">${t('keepLocal')}</button>
+        <button class="btn btn-sm btn-secondary" data-resolve="${workspace.id}" data-action="remote">${t('keepRemote')}</button>
+        <button class="btn btn-sm btn-primary" data-resolve="${workspace.id}" data-action="merge">${t('mergeAll')}</button>
       </div>
     </div>
   `;
@@ -607,7 +615,9 @@ async function renderConflictBanner() {
     return;
   }
   conflictBanner.style.display = 'flex';
-  conflictBanner.innerHTML = `&#x26a0; ${conflicts.length} workspace${conflicts.length > 1 ? 's' : ''} with sync conflicts`;
+  conflictBanner.innerHTML = conflicts.length > 1
+    ? t('conflictBannerPlural', { n: conflicts.length })
+    : t('conflictBanner', { n: conflicts.length });
 }
 
 // --- Event listeners ---
@@ -616,7 +626,7 @@ saveAllBtn.addEventListener('click', saveAllWindows);
 quickSaveBtn.addEventListener('click', quickSaveCurrentWorkspace);
 quickDeleteBtn.addEventListener('click', quickDeleteCurrentWorkspace);
 clearAllBtn.addEventListener('click', async () => {
-  if (!confirm('Delete all saved workspaces?')) return;
+  if (!confirm(t('deleteAllConfirm'))) return;
   await clearAll();
   await renderList();
   triggerAutoSync();
@@ -658,7 +668,7 @@ saveSettingsBtn.addEventListener('click', async () => {
   const serverUrl = serverUrlInput.value.trim().replace(/\/+$/, '');
   const token = syncTokenInput.value.trim();
   await saveSettings({ serverUrl, token });
-  settingsStatus.textContent = 'Settings saved.';
+  settingsStatus.textContent = t('settingsSaved');
   settingsStatus.className = 'settings-status ok';
 });
 
@@ -667,13 +677,13 @@ testConnBtn.addEventListener('click', async () => {
   const token = syncTokenInput.value.trim();
 
   if (!serverUrl) {
-    settingsStatus.textContent = 'Enter a server URL first.';
+    settingsStatus.textContent = t('enterServerUrl');
     settingsStatus.className = 'settings-status err';
     return;
   }
 
   testConnBtn.disabled = true;
-  settingsStatus.textContent = 'Testing...';
+  settingsStatus.textContent = t('testing');
   settingsStatus.className = 'settings-status';
 
   try {
@@ -688,16 +698,16 @@ testConnBtn.addEventListener('click', async () => {
       });
       if (!meRes.ok) throw new Error('Invalid token');
       const me = await meRes.json();
-      settingsStatus.textContent = `Connected as "${me.username}".`;
+      settingsStatus.textContent = t('connectedAs', { username: me.username });
       settingsStatus.className = 'settings-status ok';
     } else {
-      settingsStatus.textContent = 'Server reachable. Enter a token for sync.';
+      settingsStatus.textContent = t('serverReachableNoToken');
       settingsStatus.className = 'settings-status ok';
     }
   } catch (e) {
     const msg = e.message === 'Failed to fetch'
-      ? 'Cannot reach server. Check URL and ensure server is running.'
-      : (e.message || 'Connection failed.');
+      ? t('cannotReachServer')
+      : (e.message || t('connectionFailed'));
     settingsStatus.textContent = msg;
     settingsStatus.className = 'settings-status err';
     console.error('Sync test error:', e);
@@ -737,7 +747,7 @@ async function updateSyncBar() {
 
 async function doSync() {
   syncBtn.disabled = true;
-  syncStatus.innerHTML = '<span class="sync-spinner"></span> Syncing...';
+  syncStatus.innerHTML = `<span class="sync-spinner"></span> ${t('syncing')}`;
   syncStatus.className = 'sync-status';
 
   const result = await performSync();
@@ -747,10 +757,10 @@ async function doSync() {
     syncStatus.className = 'sync-status err';
   } else {
     const parts = [];
-    if (result.pulled > 0) parts.push(`${result.pulled} pulled`);
-    if (result.pushed > 0) parts.push(`${result.pushed} pushed`);
-    if (result.conflicts > 0) parts.push(`${result.conflicts} conflicts`);
-    syncStatus.textContent = parts.length > 0 ? parts.join(', ') : 'Up to date';
+    if (result.pulled > 0) parts.push(t('pulled', { n: result.pulled }));
+    if (result.pushed > 0) parts.push(t('pushed', { n: result.pushed }));
+    if (result.conflicts > 0) parts.push(t('conflicts', { n: result.conflicts }));
+    syncStatus.textContent = parts.length > 0 ? parts.join(', ') : t('upToDate');
     syncStatus.className = 'sync-status ok';
     await renderList();
     renderConflictBanner();
@@ -872,8 +882,8 @@ function renderFlowChips(workspaceId, flows) {
     return `
       <div class="ws-flow-section">
         <div class="ws-flow-header">
-          <span>Flows</span>
-          <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">+ New</button>
+          <span>${t('flows')}</span>
+          <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">${t('newFlow')}</button>
         </div>
       </div>`;
   }
@@ -884,16 +894,16 @@ function renderFlowChips(workspaceId, flows) {
     return `
     <span class="flow-chip ${f.enabled ? '' : 'disabled'} ${urlMatched ? 'url-matched' : ''}">
       ${urlMatched ? '<span class="flow-match-dot" title="Matches current tab">&#9889;</span>' : ''}
-      <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="Edit">${escapeHtml(f.name)}</span>
-      <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="Run">&#9654;</span>
+      <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="${t('edit')}">${escapeHtml(f.name)}</span>
+      <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="${t('run')}">&#9654;</span>
     </span>`;
   }).join('');
 
   return `
     <div class="ws-flow-section">
       <div class="ws-flow-header">
-        <span>Flows (${flows.length})</span>
-        <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">+ New</button>
+        <span>${t('flows')} (${flows.length})</span>
+        <button class="btn btn-sm btn-secondary" data-add-flow="${workspaceId}">${t('newFlow')}</button>
       </div>
       <div>${chips}</div>
     </div>`;
@@ -943,12 +953,39 @@ function openFlowEditor(wsId, flowId) {
 }
 
 async function addNewFlow(workspaceId) {
-  const flow = createFlow('New Flow');
+  const flow = createFlow();
   await saveFlow(workspaceId, flow);
   openFlowEditor(workspaceId, flow.id);
 }
 
+// --- i18n: apply translations to static HTML elements ---
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+}
+
+// --- Language selector ---
+const langSelect = document.getElementById('lang-select');
+langSelect.value = getLocale();
+langSelect.addEventListener('change', async () => {
+  await setLocale(langSelect.value);
+  applyI18n();
+  await detectCurrentWorkspace();
+  await renderList();
+  renderConflictBanner();
+});
+
 // --- Init (progressive: show content fast, defer heavy work) ---
+await initLocale();
+langSelect.value = getLocale();
+applyI18n();
 initColorPicker();
 
 // Phase 1: detect current workspace first (renderList depends on it)

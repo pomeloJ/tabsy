@@ -1,24 +1,25 @@
 import { api } from '../api.js';
+import { t } from '../i18n.js';
 
 export function render(container) {
   container.innerHTML = `
     <div class="auth-container">
       <div class="auth-card">
-        <h2>Register</h2>
+        <h2>${t('register')}</h2>
         <div class="error-message" id="register-error"></div>
         <form id="register-form">
           <div class="form-group">
-            <label for="username">Username</label>
+            <label for="username">${t('username')}</label>
             <input type="text" id="username" autocomplete="username" required minlength="3">
           </div>
           <div class="form-group">
-            <label for="password">Password</label>
+            <label for="password">${t('password')}</label>
             <input type="password" id="password" autocomplete="new-password" required minlength="6">
           </div>
-          <button type="submit" class="btn btn-primary btn-full">Register</button>
+          <button type="submit" class="btn btn-primary btn-full">${t('register')}</button>
         </form>
         <div class="auth-footer">
-          Already have an account? <a href="#/login">Login</a>
+          ${t('alreadyHaveAccount')} <a href="#/login">${t('login')}</a>
         </div>
       </div>
     </div>
@@ -40,7 +41,7 @@ export function render(container) {
 
     if (!reg.ok) {
       btn.disabled = false;
-      errorEl.textContent = reg.data?.error || 'Registration failed';
+      errorEl.textContent = reg.data?.error || t('registrationFailed');
       errorEl.classList.add('visible');
       return;
     }

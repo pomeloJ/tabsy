@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { t } from '../i18n.js';
 
 const GROUP_COLORS = {
   blue: '#1a73e8',
@@ -38,14 +39,14 @@ let hashChangeHandler = null;
 
 export async function render(container, workspaceId) {
   cleanup();
-  container.innerHTML = `<div class="ws-detail"><div class="ws-loading">Loading workspace...</div></div>`;
+  container.innerHTML = `<div class="ws-detail"><div class="ws-loading">${t('loadingWorkspace')}</div></div>`;
   detailEl = container.querySelector('.ws-detail');
 
   const { ok, data } = await api.get(`/workspaces/${workspaceId}`);
   if (!ok) {
     detailEl.innerHTML = `
-      <a href="#/" class="ws-back">${svgChevronLeft} Back to Workspaces</a>
-      <div class="ws-error">Workspace not found.</div>
+      <a href="#/" class="ws-back">${svgChevronLeft} ${t('backToWorkspaces')}</a>
+      <div class="ws-error">${t('workspaceNotFound')}</div>
     `;
     return;
   }
@@ -59,7 +60,7 @@ export async function render(container, workspaceId) {
     if (isDirty) { e.preventDefault(); e.returnValue = ''; }
   };
   hashChangeHandler = (e) => {
-    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) {
+    if (isDirty && !confirm(t('unsavedChanges'))) {
       e.preventDefault();
       history.pushState(null, '', `#/workspace/${workspaceId}`);
     }
@@ -93,7 +94,7 @@ function updateMeta() {
   if (metaEl) {
     const tabs = state.tabs || [];
     const groups = state.groups || [];
-    metaEl.textContent = `${tabs.length} tab${tabs.length !== 1 ? 's' : ''} · ${groups.length} group${groups.length !== 1 ? 's' : ''}`;
+    metaEl.textContent = `${tabs.length} ${tabs.length !== 1 ? t('tabs') : t('tab')} · ${groups.length} ${groups.length !== 1 ? t('groups') : t('group')}`;
   }
 }
 
@@ -101,16 +102,16 @@ function updateMeta() {
 function renderAll() {
   detailEl.innerHTML = `
     <div class="ws-toprow">
-      <a href="#/" class="ws-back">${svgChevronLeft} Back to Workspaces</a>
+      <a href="#/" class="ws-back">${svgChevronLeft} ${t('backToWorkspaces')}</a>
       <div class="ws-toprow-actions">
         <button class="btn btn-outline btn-sm" id="ws-save-btn" disabled>
-          ${svgSave} Save
+          ${svgSave} ${t('save')}
         </button>
       </div>
     </div>
 
     <div class="ws-header">
-      <button class="ws-color-dot" id="ws-color-btn" style="background: ${state.color}" title="Change color" aria-label="Change workspace color"></button>
+      <button class="ws-color-dot" id="ws-color-btn" style="background: ${state.color}" title="${t('changeColor')}" aria-label="${t('changeWorkspaceColor')}"></button>
       <div class="ws-color-picker" id="ws-color-picker" style="display:none">
         ${WS_COLORS.map(c => `
           <button class="ws-color-option ${c.hex === state.color ? 'active' : ''}"
@@ -121,7 +122,7 @@ function renderAll() {
         `).join('')}
       </div>
       <h1 class="ws-title" id="ws-name">${escapeHtml(state.name)}</h1>
-      <button class="btn-icon" id="ws-edit-name" title="Edit name" aria-label="Edit workspace name">${svgPencil}</button>
+      <button class="btn-icon" id="ws-edit-name" title="${t('editName')}" aria-label="${t('editWorkspaceName')}">${svgPencil}</button>
       <span class="ws-header-meta" id="ws-meta"></span>
     </div>
 
@@ -131,17 +132,17 @@ function renderAll() {
 
     <div class="ws-add-section">
       <div class="ws-add-row" id="add-tab-row">
-        <input type="url" class="ws-add-input" id="add-tab-url" placeholder="Add tab — paste URL...">
-        <button class="btn btn-sm btn-outline" id="add-tab-btn">${svgPlus} Add Tab</button>
+        <input type="url" class="ws-add-input" id="add-tab-url" placeholder="${t('addTabPlaceholder')}">
+        <button class="btn btn-sm btn-outline" id="add-tab-btn">${svgPlus} ${t('addTab')}</button>
       </div>
       <div class="ws-add-row" id="add-group-row">
-        <input type="text" class="ws-add-input" id="add-group-name" placeholder="New group name...">
+        <input type="text" class="ws-add-input" id="add-group-name" placeholder="${t('newGroupPlaceholder')}">
         <div class="ws-add-color-pick" id="add-group-colors">
           ${GROUP_COLOR_NAMES.map((c, i) => `
             <button class="ws-gcolor-opt ${i === 0 ? 'active' : ''}" data-color="${c}" title="${c}" style="background: ${GROUP_COLORS[c]}"></button>
           `).join('')}
         </div>
-        <button class="btn btn-sm btn-outline" id="add-group-btn">${svgPlus} Add Group</button>
+        <button class="btn btn-sm btn-outline" id="add-group-btn">${svgPlus} ${t('addGroup')}</button>
       </div>
     </div>
   `;
@@ -179,15 +180,15 @@ function renderGroups() {
       <div class="ws-group" data-group-id="${group.groupId}">
         <div class="ws-group-header">
           <span class="ws-group-color-bar" style="background: ${color}"></span>
-          <span class="ws-group-title">${escapeHtml(group.title || 'Untitled Group')}</span>
+          <span class="ws-group-title">${escapeHtml(group.title || t('untitled'))}</span>
           <span class="ws-group-count">${gtabs.length}</span>
-          <button class="btn-icon ws-group-edit-btn" data-action="edit-group" data-gid="${group.groupId}" title="Edit group">${svgPencil}</button>
-          <button class="btn-icon danger ws-group-del-btn" data-action="del-group" data-gid="${group.groupId}" title="Delete group">${svgX}</button>
+          <button class="btn-icon ws-group-edit-btn" data-action="edit-group" data-gid="${group.groupId}" title="${t('editGroup')}">${svgPencil}</button>
+          <button class="btn-icon danger ws-group-del-btn" data-action="del-group" data-gid="${group.groupId}" title="${t('deleteGroup')}">${svgX}</button>
           <svg class="ws-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="ws-group-tabs">
           ${gtabs.map((tab, i) => renderTab(tab, i)).join('')}
-          ${gtabs.length === 0 ? '<div class="ws-tab ws-tab-empty"><span style="color:var(--color-text-tertiary);font-size:0.8125rem">No tabs in this group</span></div>' : ''}
+          ${gtabs.length === 0 ? `<div class="ws-tab ws-tab-empty"><span style="color:var(--color-text-tertiary);font-size:0.8125rem">${t('noTabsInGroup')}</span></div>` : ''}
         </div>
       </div>
     `;
@@ -198,13 +199,13 @@ function renderGroups() {
       <div class="ws-group ungrouped">
         <div class="ws-group-header">
           <span class="ws-group-color-bar"></span>
-          <span class="ws-group-title">Ungrouped</span>
+          <span class="ws-group-title">${t('ungrouped')}</span>
           <span class="ws-group-count">${ungrouped.length}</span>
           <svg class="ws-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="ws-group-tabs">
           ${ungrouped.length > 0 ? ungrouped.map((tab, i) => renderTab(tab, i)).join('') :
-            '<div class="ws-tab ws-tab-empty"><span style="color:var(--color-text-tertiary);font-size:0.8125rem">No ungrouped tabs</span></div>'}
+            `<div class="ws-tab ws-tab-empty"><span style="color:var(--color-text-tertiary);font-size:0.8125rem">${t('noUngroupedTabs')}</span></div>`}
         </div>
       </div>
     `;
@@ -215,7 +216,9 @@ function renderGroups() {
 }
 
 // --- Render flows (read-only) ---
-const TRIGGER_LABELS = { manual: 'Manual', page_load: 'Page Load', page_idle: 'Page Idle' };
+function getTriggerLabels() {
+  return { manual: t('triggerManual'), page_load: t('triggerPageLoad'), page_idle: t('triggerPageIdle') };
+}
 const BLOCK_LABELS = {
   click: '👆 Click', fill: '✏️ Fill', select: '📋 Select', check: '☑️ Check',
   scroll_to: '📜 Scroll', remove_element: '🗑️ Remove', set_attribute: '🏷️ Attr',
@@ -239,7 +242,7 @@ function renderFlows() {
   flowsEl.innerHTML = `
     <div class="ws-flows-section">
       <div class="ws-flows-header">
-        <span class="ws-flows-title">${svgFlow} Flows</span>
+        <span class="ws-flows-title">${svgFlow} ${t('flows')}</span>
         <span class="ws-flows-count">${flows.length}</span>
       </div>
       ${flows.map(f => renderFlowCard(f)).join('')}
@@ -255,7 +258,7 @@ function renderFlows() {
 }
 
 function renderFlowCard(flow) {
-  const trigger = TRIGGER_LABELS[flow.trigger] || flow.trigger;
+  const trigger = getTriggerLabels()[flow.trigger] || flow.trigger;
   const blockCount = countBlocks(flow.blocks || []);
   const varCount = Object.keys(flow.variables || {}).length;
 
@@ -268,10 +271,10 @@ function renderFlowCard(flow) {
         <svg class="ws-flow-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="ws-flow-card-body">
-        ${flow.match ? `<div class="ws-flow-meta-row"><span class="ws-flow-meta-label">URL Match</span><code>${escapeHtml(flow.match)}</code></div>` : ''}
+        ${flow.match ? `<div class="ws-flow-meta-row"><span class="ws-flow-meta-label">${t('urlMatch')}</span><code>${escapeHtml(flow.match)}</code></div>` : ''}
         <div class="ws-flow-meta-row">
-          <span class="ws-flow-meta-label">Blocks</span><span>${blockCount}</span>
-          <span class="ws-flow-meta-label" style="margin-left:12px">Variables</span><span>${varCount}</span>
+          <span class="ws-flow-meta-label">${t('blocks')}</span><span>${blockCount}</span>
+          <span class="ws-flow-meta-label" style="margin-left:12px">${t('variables')}</span><span>${varCount}</span>
         </div>
         ${renderFlowBlocks(flow.blocks || [])}
       </div>
@@ -280,17 +283,17 @@ function renderFlowCard(flow) {
 }
 
 function renderFlowBlocks(blocks, depth = 0) {
-  if (blocks.length === 0) return '<div class="ws-flow-blocks-empty">No blocks</div>';
+  if (blocks.length === 0) return `<div class="ws-flow-blocks-empty">${t('noBlocks')}</div>`;
   return `<div class="ws-flow-blocks" style="margin-left:${depth * 12}px">
     ${blocks.map(b => {
       const label = BLOCK_LABELS[b.type] || b.type;
       const summary = getFlowBlockSummary(b);
       let nested = '';
-      if (b.then && b.then.length) nested += `<div class="ws-flow-branch-label">Then</div>${renderFlowBlocks(b.then, depth + 1)}`;
-      if (b.else && b.else.length) nested += `<div class="ws-flow-branch-label">Else</div>${renderFlowBlocks(b.else, depth + 1)}`;
+      if (b.then && b.then.length) nested += `<div class="ws-flow-branch-label">${t('thenBranch')}</div>${renderFlowBlocks(b.then, depth + 1)}`;
+      if (b.else && b.else.length) nested += `<div class="ws-flow-branch-label">${t('elseBranch')}</div>${renderFlowBlocks(b.else, depth + 1)}`;
       if (b.body && b.body.length) nested += renderFlowBlocks(b.body, depth + 1);
-      if (b.try && b.try.length) nested += `<div class="ws-flow-branch-label">Try</div>${renderFlowBlocks(b.try, depth + 1)}`;
-      if (b.catch && b.catch.length) nested += `<div class="ws-flow-branch-label">Catch</div>${renderFlowBlocks(b.catch, depth + 1)}`;
+      if (b.try && b.try.length) nested += `<div class="ws-flow-branch-label">${t('tryBranch')}</div>${renderFlowBlocks(b.try, depth + 1)}`;
+      if (b.catch && b.catch.length) nested += `<div class="ws-flow-branch-label">${t('catchBranch')}</div>${renderFlowBlocks(b.catch, depth + 1)}`;
       return `<div class="ws-flow-block">
         <span class="ws-flow-block-label">${label}</span>
         ${summary ? `<span class="ws-flow-block-summary">${escapeHtml(summary)}</span>` : ''}
@@ -337,9 +340,9 @@ function renderTab(tab, idx) {
   const faviconUrl = getFaviconUrl(tab.url);
   const groups = state.groups || [];
   const moveOptions = [
-    `<option value="">Move to...</option>`,
-    ...groups.map(g => `<option value="${g.groupId}" ${tab.groupId === g.groupId ? 'disabled' : ''}>${escapeHtml(g.title || 'Untitled')}</option>`),
-    `<option value="__ungrouped" ${!tab.groupId ? 'disabled' : ''}>Ungrouped</option>`
+    `<option value="">${t('moveTo')}</option>`,
+    ...groups.map(g => `<option value="${g.groupId}" ${tab.groupId === g.groupId ? 'disabled' : ''}>${escapeHtml(g.title || t('untitled'))}</option>`),
+    `<option value="__ungrouped" ${!tab.groupId ? 'disabled' : ''}>${t('ungrouped')}</option>`
   ].join('');
 
   return `
@@ -351,10 +354,10 @@ function renderTab(tab, idx) {
         <div class="ws-tab-title">${escapeHtml(tab.title || tab.url)}</div>
         <div class="ws-tab-url">${escapeHtml(tab.url)}</div>
       </div>
-      ${tab.pinned ? '<span class="ws-tab-pin">PIN</span>' : ''}
-      <a class="btn-icon ws-tab-open" href="${escapeAttr(tab.url)}" target="_blank" rel="noopener noreferrer" title="Open in new tab" aria-label="Open ${escapeHtml(tab.title || tab.url)} in new tab">${svgExternalLink}</a>
-      <select class="ws-tab-move" title="Move to group" aria-label="Move tab to group">${moveOptions}</select>
-      <button class="btn-icon danger ws-tab-del" title="Remove tab" aria-label="Remove tab">${svgX}</button>
+      ${tab.pinned ? `<span class="ws-tab-pin">${t('pin')}</span>` : ''}
+      <a class="btn-icon ws-tab-open" href="${escapeAttr(tab.url)}" target="_blank" rel="noopener noreferrer" title="${t('openInNewTab')}" aria-label="${t('openInNewTab')}">${svgExternalLink}</a>
+      <select class="ws-tab-move" title="${t('moveToGroup')}" aria-label="${t('moveTabToGroup')}">${moveOptions}</select>
+      <button class="btn-icon danger ws-tab-del" title="${t('removeTab')}" aria-label="${t('removeTab')}">${svgX}</button>
     </div>
   `;
 }
@@ -581,7 +584,7 @@ function addGroup(nameInput, colorsEl) {
 function deleteGroup(gid) {
   const group = state.groups.find(g => g.groupId === gid);
   if (!group) return;
-  if (!confirm(`Delete group "${group.title}"? Tabs will become ungrouped.`)) return;
+  if (!confirm(t('deleteGroupConfirm', { name: group.title }))) return;
 
   // Move tabs to ungrouped
   state.tabs.forEach(t => {
@@ -608,8 +611,8 @@ function editGroup(gid) {
         <button class="ws-gcolor-opt ${c === group.color ? 'active' : ''}" data-color="${c}" title="${c}" style="background: ${GROUP_COLORS[c]}"></button>
       `).join('')}
     </div>
-    <button class="btn btn-sm btn-primary ws-group-edit-save">Done</button>
-    <button class="btn btn-sm btn-ghost ws-group-edit-cancel">Cancel</button>
+    <button class="btn btn-sm btn-primary ws-group-edit-save">${t('done')}</button>
+    <button class="btn btn-sm btn-ghost ws-group-edit-cancel">${t('cancel')}</button>
   `;
 
   const input = header.querySelector('input');
@@ -678,16 +681,16 @@ function editTab(tabEl, url, groupId) {
   infoEl.outerHTML = `
     <div class="ws-tab-edit">
       <div class="ws-tab-edit-field">
-        <label>Title</label>
-        <input type="text" class="ws-tab-edit-input" id="tab-edit-title" value="${escapeAttr(origTitle)}" placeholder="Tab title">
+        <label>${t('title')}</label>
+        <input type="text" class="ws-tab-edit-input" id="tab-edit-title" value="${escapeAttr(origTitle)}" placeholder="${t('title')}">
       </div>
       <div class="ws-tab-edit-field">
-        <label>URL</label>
+        <label>${t('url')}</label>
         <input type="url" class="ws-tab-edit-input" id="tab-edit-url" value="${escapeAttr(origUrl)}" placeholder="https://...">
       </div>
       <div class="ws-tab-edit-actions">
-        <button class="btn btn-sm btn-primary ws-tab-edit-done">Done</button>
-        <button class="btn btn-sm btn-ghost ws-tab-edit-cancel">Cancel</button>
+        <button class="btn btn-sm btn-primary ws-tab-edit-done">${t('done')}</button>
+        <button class="btn btn-sm btn-ghost ws-tab-edit-cancel">${t('cancel')}</button>
       </div>
     </div>
   `;
@@ -743,7 +746,7 @@ async function saveWorkspace() {
   const saveBtn = detailEl.querySelector('#ws-save-btn');
   saving = true;
   saveBtn.disabled = true;
-  saveBtn.innerHTML = `${svgLoader} Saving...`;
+  saveBtn.innerHTML = `${svgLoader} ${t('saving')}`;
 
   state.savedAt = new Date().toISOString();
 
@@ -761,18 +764,18 @@ async function saveWorkspace() {
   if (ok) {
     original = JSON.stringify(state);
     isDirty = false;
-    saveBtn.innerHTML = `${svgCheck} Saved`;
+    saveBtn.innerHTML = `${svgCheck} ${t('saved')}`;
     saveBtn.classList.remove('btn-primary');
     saveBtn.classList.add('btn-outline');
     setTimeout(() => {
-      saveBtn.innerHTML = `${svgSave} Save`;
+      saveBtn.innerHTML = `${svgSave} ${t('save')}`;
       saveBtn.disabled = true;
     }, 1500);
-    showToast('Workspace saved');
+    showToast(t('workspaceSaved'));
   } else {
-    saveBtn.innerHTML = `${svgSave} Save`;
+    saveBtn.innerHTML = `${svgSave} ${t('save')}`;
     saveBtn.disabled = false;
-    showToast('Failed to save workspace', true);
+    showToast(t('failedToSaveWorkspace'), true);
   }
 }
 

@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { t } from '../i18n.js';
 
 const GROUP_COLORS = {
   blue: '#1a73e8',
@@ -33,18 +34,18 @@ const svgTrash = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" st
 export async function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h1>Workspaces</h1>
+      <h1>${t('workspaces')}</h1>
       <div class="page-header-actions">
-        <button class="btn btn-outline btn-sm" id="import-btn" title="Import JSON">${svgUpload} Import</button>
-        <button class="btn btn-outline btn-sm" id="export-btn" title="Export JSON">${svgDownload} Export</button>
-        <button class="btn btn-primary btn-sm" id="new-ws-btn">${svgPlus} New Workspace</button>
+        <button class="btn btn-outline btn-sm" id="import-btn" title="${t('importJson')}">${svgUpload} ${t('import')}</button>
+        <button class="btn btn-outline btn-sm" id="export-btn" title="${t('exportJson')}">${svgDownload} ${t('export')}</button>
+        <button class="btn btn-primary btn-sm" id="new-ws-btn">${svgPlus} ${t('newWorkspace')}</button>
       </div>
     </div>
     <div class="dashboard-toolbar">
-      <input type="text" class="search-input" id="search" placeholder="Search workspaces...">
+      <input type="text" class="search-input" id="search" placeholder="${t('searchWorkspaces')}">
       <select class="sort-select" id="sort">
-        <option value="savedAt">Sort by time</option>
-        <option value="name">Sort by name</option>
+        <option value="savedAt">${t('sortByTime')}</option>
+        <option value="name">${t('sortByName')}</option>
       </select>
     </div>
     <div id="workspace-list" class="workspace-list"></div>
@@ -57,7 +58,7 @@ export async function render(container) {
 
   const { ok, data } = await api.get('/workspaces');
   if (!ok) {
-    listEl.innerHTML = '<div class="empty-state"><p>Failed to load workspaces.</p></div>';
+    listEl.innerHTML = `<div class="empty-state"><p>${t('failedToLoadWorkspaces')}</p></div>`;
     return;
   }
 
@@ -79,8 +80,8 @@ export async function render(container) {
 
     if (filtered.length === 0) {
       const msg = workspaces.length === 0
-        ? '<p>No workspaces yet.</p><p style="margin-top:8px;font-size:0.875rem">Create one to get started.</p>'
-        : '<p>No workspaces found.</p>';
+        ? `<p>${t('noWorkspacesYet')}</p><p style="margin-top:8px;font-size:0.875rem">${t('createToStart')}</p>`
+        : `<p>${t('noWorkspacesFound')}</p>`;
       listEl.innerHTML = `<div class="empty-state">${msg}</div>`;
       return;
     }
@@ -95,14 +96,14 @@ export async function render(container) {
           ${renderGroupChips(w.groupSummary, w.groupCount)}
         </div>
         <div class="workspace-card-meta">
-          <span>${w.tabCount} tab${w.tabCount !== 1 ? 's' : ''}</span>
-          <span>${w.groupCount} group${w.groupCount !== 1 ? 's' : ''}</span>
-          ${w.flowCount > 0 ? `<span>${w.flowCount} flow${w.flowCount !== 1 ? 's' : ''}</span>` : ''}
+          <span>${w.tabCount} ${w.tabCount !== 1 ? t('tabs') : t('tab')}</span>
+          <span>${w.groupCount} ${w.groupCount !== 1 ? t('groups') : t('group')}</span>
+          ${w.flowCount > 0 ? `<span>${w.flowCount} ${w.flowCount !== 1 ? t('flowsPlural') : t('flow')}</span>` : ''}
           <span>${formatTime(w.savedAt)}</span>
         </div>
         <div class="workspace-card-actions">
-          <button class="btn-icon danger" data-delete="${w.id}" title="Delete workspace"
-            aria-label="Delete ${escapeHtml(w.name)}">${svgTrash}</button>
+          <button class="btn-icon danger" data-delete="${w.id}" title="${t('deleteWorkspace')}"
+            aria-label="${t('deleteWorkspace')} ${escapeHtml(w.name)}">${svgTrash}</button>
         </div>
       </div>
     `).join('');
@@ -121,7 +122,7 @@ export async function render(container) {
         e.stopPropagation();
         const id = btn.dataset.delete;
         const ws = workspaces.find(w => w.id === id);
-        if (!confirm(`Delete "${ws?.name}"?`)) return;
+        if (!confirm(t('deleteConfirm', { name: ws?.name }))) return;
 
         btn.disabled = true;
         const res = await api.del(`/workspaces/${id}`);
@@ -130,7 +131,7 @@ export async function render(container) {
           renderList();
         } else {
           btn.disabled = false;
-          alert('Failed to delete workspace.');
+          alert(t('failedToDeleteWorkspace'));
         }
       });
     });
@@ -192,12 +193,12 @@ export async function render(container) {
 
       const wsArray = importData.workspaces;
       if (!Array.isArray(wsArray) || wsArray.length === 0) {
-        alert('Invalid file: no workspaces found.');
+        alert(t('invalidImportFile'));
         return;
       }
 
       const mode = prompt(
-        `Found ${wsArray.length} workspace(s) to import.\n\nType "merge" to add new ones only, or "overwrite" to replace existing ones with same ID.\n\nDefault: merge`,
+        t('importPrompt', { n: wsArray.length }),
         'merge'
       );
       if (mode === null) return;
@@ -232,7 +233,7 @@ export async function render(container) {
         else skipped++;
       }
 
-      alert(`Import complete: ${imported} imported, ${skipped} skipped.`);
+      alert(t('importComplete', { imported, skipped }));
 
       // Refresh
       const refresh = await api.get('/workspaces');
@@ -241,7 +242,7 @@ export async function render(container) {
         renderList();
       }
     } catch (err) {
-      alert('Failed to parse import file. Make sure it is a valid Tabsy JSON export.');
+      alert(t('failedToParseImport'));
     }
   });
 }
@@ -257,16 +258,16 @@ function showNewWorkspaceModal(container, onCreate) {
   overlay.innerHTML = `
     <div class="modal">
       <div class="modal-header">
-        <h2>New Workspace</h2>
+        <h2>${t('newWorkspace')}</h2>
         <button class="btn-icon modal-close" aria-label="Close">${svgX}</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="new-ws-name">Name</label>
+          <label for="new-ws-name">${t('name')}</label>
           <input type="text" id="new-ws-name" placeholder="My Workspace" autofocus>
         </div>
         <div class="form-group">
-          <label>Color</label>
+          <label>${t('color')}</label>
           <div class="ws-color-grid">
             ${WS_COLORS.map((c, i) => `
               <button class="ws-color-option ${i === 0 ? 'active' : ''}" data-color="${c.hex}" title="${c.name}" style="background: ${c.hex}">
@@ -277,8 +278,8 @@ function showNewWorkspaceModal(container, onCreate) {
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-ghost modal-cancel">Cancel</button>
-        <button class="btn btn-primary" id="modal-create-btn">Create</button>
+        <button class="btn btn-ghost modal-cancel">${t('cancel')}</button>
+        <button class="btn btn-primary" id="modal-create-btn">${t('create')}</button>
       </div>
     </div>
   `;
@@ -318,7 +319,7 @@ function showNewWorkspaceModal(container, onCreate) {
     if (!name) { nameInput.focus(); return; }
 
     createBtn.disabled = true;
-    createBtn.textContent = 'Creating...';
+    createBtn.textContent = t('creating');
 
     const id = crypto.randomUUID();
     const savedAt = new Date().toISOString();
@@ -336,8 +337,8 @@ function showNewWorkspaceModal(container, onCreate) {
       });
     } else {
       createBtn.disabled = false;
-      createBtn.textContent = 'Create';
-      alert(data?.error || 'Failed to create workspace.');
+      createBtn.textContent = t('create');
+      alert(data?.error || t('failedToCreateWorkspace'));
     }
   };
 
@@ -350,14 +351,14 @@ function showNewWorkspaceModal(container, onCreate) {
 
 function renderGroupChips(groupSummary, totalCount) {
   if (!groupSummary || groupSummary.length === 0) {
-    return '<span class="group-chip" style="opacity: 0.5">No groups</span>';
+    return `<span class="group-chip" style="opacity: 0.5">${t('noGroups')}</span>`;
   }
 
   const chips = groupSummary.map(g => {
     const color = GROUP_COLORS[g.color] || GROUP_COLORS.grey;
     return `<span class="group-chip">
       <span class="group-chip-dot" style="background: ${color}"></span>
-      ${escapeHtml(g.title || 'Untitled')}
+      ${escapeHtml(g.title || t('untitled'))}
     </span>`;
   }).join('');
 
@@ -381,10 +382,10 @@ function formatTime(iso) {
   const now = new Date();
   const diff = now - d;
 
-  if (diff < 60000) return 'Just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+  if (diff < 60000) return t('justNow');
+  if (diff < 3600000) return t('mAgo', { n: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('hAgo', { n: Math.floor(diff / 3600000) });
+  if (diff < 604800000) return t('dAgo', { n: Math.floor(diff / 86400000) });
 
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

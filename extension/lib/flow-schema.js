@@ -1,7 +1,7 @@
 /**
- * Flow Schema — 區塊類型定義與驗證
+ * Flow Schema — Block type definitions and validation
  *
- * Flow JSON 格式：
+ * Flow JSON format:
  * {
  *   id: string,
  *   name: string,
@@ -13,133 +13,135 @@
  * }
  */
 
-// --- 區塊類型定義 ---
+import { t } from './i18n.js';
+
+// --- Block type definitions ---
 
 export const BLOCK_TYPES = {
-  // === 動作 ===
+  // === Action ===
   click: {
     category: 'action',
-    label: '👆 點擊',
+    get label() { return t('block.click'); },
     params: { selector: 'string' },
     defaults: { selector: '' }
   },
   fill: {
     category: 'action',
-    label: '✏️ 填入文字',
+    get label() { return t('block.fill'); },
     params: { selector: 'string', value: 'string', clearFirst: 'boolean' },
     defaults: { selector: '', value: '', clearFirst: true }
   },
   select: {
     category: 'action',
-    label: '📋 選擇下拉選項',
+    get label() { return t('block.select'); },
     params: { selector: 'string', value: 'string' },
     defaults: { selector: '', value: '' }
   },
   check: {
     category: 'action',
-    label: '☑️ 勾選/取消',
+    get label() { return t('block.check'); },
     params: { selector: 'string', checked: 'boolean' },
     defaults: { selector: '', checked: true }
   },
   scroll_to: {
     category: 'action',
-    label: '📜 捲動到元素',
+    get label() { return t('block.scroll_to'); },
     params: { selector: 'string' },
     defaults: { selector: '' }
   },
   remove_element: {
     category: 'action',
-    label: '🗑️ 移除元素',
+    get label() { return t('block.remove_element'); },
     params: { selector: 'string' },
     defaults: { selector: '' }
   },
   set_attribute: {
     category: 'action',
-    label: '🏷️ 設定屬性',
+    get label() { return t('block.set_attribute'); },
     params: { selector: 'string', attribute: 'string', value: 'string' },
     defaults: { selector: '', attribute: '', value: '' }
   },
   add_class: {
     category: 'action',
-    label: '🎨 新增 CSS class',
+    get label() { return t('block.add_class'); },
     params: { selector: 'string', className: 'string' },
     defaults: { selector: '', className: '' }
   },
   remove_class: {
     category: 'action',
-    label: '🎨 移除 CSS class',
+    get label() { return t('block.remove_class'); },
     params: { selector: 'string', className: 'string' },
     defaults: { selector: '', className: '' }
   },
   inject_css: {
     category: 'action',
-    label: '💅 注入 CSS',
+    get label() { return t('block.inject_css'); },
     params: { css: 'string' },
     defaults: { css: '' }
   },
   navigate: {
     category: 'action',
-    label: '🔗 導航到網址',
+    get label() { return t('block.navigate'); },
     params: { url: 'string' },
     defaults: { url: '' }
   },
 
-  // === 等待 ===
+  // === Wait ===
   wait_element: {
     category: 'wait',
-    label: '⏳ 等待元素出現',
+    get label() { return t('block.wait_element'); },
     params: { selector: 'string', timeout: 'number' },
     defaults: { selector: '', timeout: 5000 }
   },
   wait_hidden: {
     category: 'wait',
-    label: '⏳ 等待元素消失',
+    get label() { return t('block.wait_hidden'); },
     params: { selector: 'string', timeout: 'number' },
     defaults: { selector: '', timeout: 5000 }
   },
   delay: {
     category: 'wait',
-    label: '⏱️ 延遲等待',
+    get label() { return t('block.delay'); },
     params: { ms: 'number' },
     defaults: { ms: 1000 }
   },
 
-  // === 資料 ===
+  // === Data ===
   get_text: {
     category: 'data',
-    label: '📋 取得文字',
+    get label() { return t('block.get_text'); },
     params: { selector: 'string', variable: 'string' },
     defaults: { selector: '', variable: '' }
   },
   get_attribute: {
     category: 'data',
-    label: '📋 取得屬性值',
+    get label() { return t('block.get_attribute'); },
     params: { selector: 'string', attribute: 'string', variable: 'string' },
     defaults: { selector: '', attribute: '', variable: '' }
   },
   get_value: {
     category: 'data',
-    label: '📋 取得輸入值',
+    get label() { return t('block.get_value'); },
     params: { selector: 'string', variable: 'string' },
     defaults: { selector: '', variable: '' }
   },
   set_variable: {
     category: 'data',
-    label: '📦 設定變數',
+    get label() { return t('block.set_variable'); },
     params: { variable: 'string', value: 'string' },
     defaults: { variable: '', value: '' }
   },
   eval_expression: {
     category: 'data',
-    label: '🧮 計算表達式',
+    get label() { return t('block.eval_expression'); },
     params: { expression: 'string', variable: 'string' },
     defaults: { expression: '', variable: '' }
   },
 
-  // === 邏輯 ===
+  // === Logic ===
   if: {
     category: 'logic',
-    label: '❓ 如果',
+    get label() { return t('block.if'); },
     params: { condition: 'condition' },
     defaults: {
       condition: { type: 'element_exists', selector: '' },
@@ -150,124 +152,124 @@ export const BLOCK_TYPES = {
   },
   loop: {
     category: 'logic',
-    label: '🔄 迴圈',
+    get label() { return t('block.loop'); },
     params: { times: 'number' },
     defaults: { times: 3, body: [] },
     hasChildren: true
   },
   loop_elements: {
     category: 'logic',
-    label: '🔄 遍歷元素',
+    get label() { return t('block.loop_elements'); },
     params: { selector: 'string', itemVariable: 'string' },
     defaults: { selector: '', itemVariable: 'el', body: [] },
     hasChildren: true
   },
   try_catch: {
     category: 'logic',
-    label: '🛡️ 嘗試/失敗',
+    get label() { return t('block.try_catch'); },
     params: {},
     defaults: { try: [], catch: [] },
     hasChildren: true
   },
   break: {
     category: 'logic',
-    label: '⏹️ 中斷迴圈',
+    get label() { return t('block.break'); },
     params: {}
   },
 
-  // === 輸出 ===
+  // === Output ===
   log: {
     category: 'output',
-    label: '💬 記錄訊息',
+    get label() { return t('block.log'); },
     params: { message: 'string' },
     defaults: { message: '' }
   },
   alert: {
     category: 'output',
-    label: '🔔 彈出提示',
+    get label() { return t('block.alert'); },
     params: { message: 'string' },
     defaults: { message: '' }
   },
 
-  // === 自訂 ===
+  // === Custom ===
   run_script: {
     category: 'custom',
-    label: '⚡ 執行 JS 腳本',
+    get label() { return t('block.run_script'); },
     params: { code: 'string' },
     defaults: { code: '' }
   }
 };
 
-// --- 條件類型（IF 區塊用） ---
+// --- Condition types (for IF blocks) ---
 
 export const CONDITION_TYPES = {
   element_exists: {
-    label: '元素存在',
+    get label() { return t('cond.element_exists'); },
     params: { selector: 'string' }
   },
   element_visible: {
-    label: '元素可見',
+    get label() { return t('cond.element_visible'); },
     params: { selector: 'string' }
   },
   element_hidden: {
-    label: '元素隱藏',
+    get label() { return t('cond.element_hidden'); },
     params: { selector: 'string' }
   },
   text_contains: {
-    label: '文字包含',
+    get label() { return t('cond.text_contains'); },
     params: { selector: 'string', text: 'string' }
   },
   text_equals: {
-    label: '文字等於',
+    get label() { return t('cond.text_equals'); },
     params: { selector: 'string', text: 'string' }
   },
   url_contains: {
-    label: 'URL 包含',
+    get label() { return t('cond.url_contains'); },
     params: { text: 'string' }
   },
   url_matches: {
-    label: 'URL 符合 pattern',
+    get label() { return t('cond.url_matches'); },
     params: { pattern: 'string' }
   },
   variable_equals: {
-    label: '變數等於',
+    get label() { return t('cond.variable_equals'); },
     params: { variable: 'string', value: 'string' }
   },
   variable_contains: {
-    label: '變數包含',
+    get label() { return t('cond.variable_contains'); },
     params: { variable: 'string', value: 'string' }
   },
   expression: {
-    label: '自訂表達式',
+    get label() { return t('cond.expression'); },
     params: { code: 'string' }
   }
 };
 
-// --- 觸發類型 ---
+// --- Trigger types ---
 
 export const TRIGGER_TYPES = {
-  manual:    { label: '手動觸發' },
-  page_load: { label: '頁面載入時' },
-  page_idle: { label: '頁面閒置時 (document_idle)' }
+  manual:    { get label() { return t('trigger.manual'); } },
+  page_load: { get label() { return t('trigger.page_load'); } },
+  page_idle: { get label() { return t('trigger.page_idle'); } }
 };
 
-// --- 區塊分類（給 UI 選單用） ---
+// --- Block categories (for UI menu) ---
 
 export const BLOCK_CATEGORIES = {
-  action: { label: '動作', color: '#107c10' },
-  wait:   { label: '等待', color: '#ca5010' },
-  data:   { label: '資料', color: '#0078d4' },
-  logic:  { label: '邏輯', color: '#881798' },
-  output: { label: '輸出', color: '#038387' },
-  custom: { label: '自訂', color: '#69797e' }
+  action: { get label() { return t('cat.action'); }, color: '#107c10' },
+  wait:   { get label() { return t('cat.wait'); },   color: '#ca5010' },
+  data:   { get label() { return t('cat.data'); },   color: '#0078d4' },
+  logic:  { get label() { return t('cat.logic'); },  color: '#881798' },
+  output: { get label() { return t('cat.output'); }, color: '#038387' },
+  custom: { get label() { return t('cat.custom'); }, color: '#69797e' }
 };
 
-// --- 建立新 flow ---
+// --- Create new flow ---
 
-export function createFlow(name = '新流程') {
+export function createFlow(name) {
   return {
     id: crypto.randomUUID(),
-    name,
+    name: name || t('newFlowName'),
     match: '',
     trigger: 'manual',
     enabled: true,
@@ -276,7 +278,7 @@ export function createFlow(name = '新流程') {
   };
 }
 
-// --- 建立新區塊 ---
+// --- Create new block ---
 
 export function createBlock(type) {
   const def = BLOCK_TYPES[type];
@@ -284,7 +286,7 @@ export function createBlock(type) {
   return { type, ...structuredClone(def.defaults) };
 }
 
-// --- 變數插值 (支援 {{var:name}} 語法) ---
+// --- Variable interpolation (supports {{var:name}} syntax) ---
 
 export function interpolate(str, variables) {
   if (typeof str !== 'string') return str;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -199,28 +199,28 @@
     <div class="stats">
       <div class="stat-card">
         <div class="stat-value" id="tabCount">—</div>
-        <div class="stat-label">分頁</div>
+        <div class="stat-label" id="tabLabel">Tabs</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="groupCount">—</div>
-        <div class="stat-label">群組</div>
+        <div class="stat-label" id="groupLabel">Groups</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="pinnedCount">—</div>
-        <div class="stat-label">釘選</div>
+        <div class="stat-label" id="pinnedLabel">Pinned</div>
       </div>
     </div>
 
     <div class="timeline" id="timeline">
-      <div class="timeline-title">記錄</div>
+      <div class="timeline-title" id="timelineTitle">Timeline</div>
     </div>
 
     <div class="groups" id="groups">
-      <div class="groups-title">群組</div>
+      <div class="groups-title" id="groupsTitle">Groups</div>
       <div id="groupList"></div>
     </div>
 
-    <div class="hint">此分頁為 Tabsy workspace 標記 — 請勿關閉</div>
+    <div class="hint" id="hint">This tab is a Tabsy workspace marker — do not close</div>
   </div>
   <script src="marker.js"></script>
 </body>

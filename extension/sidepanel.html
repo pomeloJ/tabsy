@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" id="html-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1162,36 +1162,36 @@
   <div id="view-main">
     <!-- Current workspace info + actions -->
     <div class="current-ws" id="current-ws">
-      <span class="ws-label" id="current-ws-label">No workspace detected</span>
+      <span class="ws-label" id="current-ws-label" data-i18n="noWorkspaceDetected">No workspace detected</span>
       <div class="current-ws-meta" id="current-ws-meta" style="display:none"></div>
       <div class="current-ws-actions" id="current-ws-actions" style="display:none">
-        <button class="btn btn-primary btn-sm" id="quick-save-btn">Save</button>
-        <button class="btn btn-danger btn-sm" id="quick-delete-btn">Delete</button>
+        <button class="btn btn-primary btn-sm" id="quick-save-btn" data-i18n="save">Save</button>
+        <button class="btn btn-danger btn-sm" id="quick-delete-btn" data-i18n="delete">Delete</button>
       </div>
       <div class="current-ws-flows" id="current-ws-flows" style="display:none"></div>
     </div>
 
     <!-- Save as new workspace (collapsible when in a workspace) -->
     <div class="save-new-toggle" id="save-new-toggle" style="display:none">
-      <span>Save as New Workspace</span>
+      <span data-i18n="saveAsNewWorkspace">Save as New Workspace</span>
       <span class="arrow" id="save-new-arrow">&#9654;</span>
     </div>
     <div class="save-section" id="save-section">
-      <input type="text" id="ws-name" placeholder="Workspace name">
+      <input type="text" id="ws-name" placeholder="Workspace name" data-i18n-placeholder="workspaceName">
       <div class="color-picker" id="color-picker"></div>
       <div class="btn-row">
-        <button class="btn btn-primary" id="save-btn">Save Window</button>
-        <button class="btn btn-secondary" id="save-all-btn">Save All</button>
+        <button class="btn btn-primary" id="save-btn" data-i18n="saveWindow">Save Window</button>
+        <button class="btn btn-secondary" id="save-all-btn" data-i18n="saveAll">Save All</button>
       </div>
     </div>
 
     <!-- Sync bar -->
     <div class="sync-bar" id="sync-bar" style="display:none">
-      <button class="btn btn-primary btn-sm" id="sync-btn">Sync</button>
+      <button class="btn btn-primary btn-sm" id="sync-btn" data-i18n="sync">Sync</button>
       <span class="sync-status" id="sync-status"></span>
       <label class="auto-sync-toggle">
         <input type="checkbox" id="auto-sync-checkbox" checked>
-        Auto
+        <span data-i18n="auto">Auto</span>
       </label>
     </div>
 
@@ -1212,7 +1212,7 @@
 
     <!-- Other workspaces (collapsible) -->
     <div class="other-ws-toggle" id="other-ws-toggle">
-      <span id="other-ws-title">Other Workspaces</span>
+      <span id="other-ws-title" data-i18n="otherWorkspaces">Other Workspaces</span>
       <span class="arrow open" id="other-ws-arrow">&#9654;</span>
     </div>
     <div class="other-ws-body" id="other-ws-body">
@@ -1221,64 +1221,73 @@
 
     <!-- Settings -->
     <div class="settings-toggle" id="settings-toggle">
-      <span>Sync Settings</span>
+      <span data-i18n="syncSettings">Sync Settings</span>
       <span class="arrow" id="settings-arrow">&#9654;</span>
     </div>
     <div class="settings-panel" id="settings-panel">
-      <label for="server-url">Server URL</label>
+      <label for="server-url" data-i18n="serverUrl">Server URL</label>
       <input type="url" id="server-url" placeholder="http://localhost:3000">
-      <label for="sync-token">Sync Token</label>
+      <label for="sync-token" data-i18n="syncToken">Sync Token</label>
       <input type="text" id="sync-token" placeholder="tb_xxxxxxxxxxxx">
       <div class="settings-status" id="settings-status"></div>
       <div class="btn-row">
-        <button class="btn btn-primary btn-sm" id="save-settings-btn">Save</button>
-        <button class="btn btn-secondary btn-sm" id="test-conn-btn">Test</button>
+        <button class="btn btn-primary btn-sm" id="save-settings-btn" data-i18n="save">Save</button>
+        <button class="btn btn-secondary btn-sm" id="test-conn-btn" data-i18n="test">Test</button>
       </div>
+    </div>
+
+    <!-- Language -->
+    <div class="settings-toggle" id="lang-toggle">
+      <span data-i18n="language">Language</span>
+      <select id="lang-select" style="border:1px solid var(--border);border-radius:4px;font-size:12px;padding:2px 6px;background:var(--surface);cursor:pointer" onclick="event.stopPropagation()">
+        <option value="en">English</option>
+        <option value="zh-TW">繁體中文</option>
+      </select>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <button class="btn btn-danger btn-sm" id="clear-all-btn">Clear All</button>
+      <button class="btn btn-danger btn-sm" id="clear-all-btn" data-i18n="clearAll">Clear All</button>
     </div>
   </div>
 
   <!-- ===== Flow editor view ===== -->
   <div id="view-flow" style="display:none">
     <div class="top-bar">
-      <button class="back-btn" id="back-btn" title="Back">&larr;</button>
-      <input type="text" class="flow-name-input" id="flow-name" placeholder="Flow name" value="New Flow">
-      <button class="btn btn-success" id="test-btn">&#9654; Test</button>
-      <button class="btn btn-primary" id="fe-save-btn">Save</button>
+      <button class="back-btn" id="back-btn" data-i18n-title="back">&larr;</button>
+      <input type="text" class="flow-name-input" id="flow-name" data-i18n-placeholder="flowName" value="New Flow">
+      <button class="btn btn-success" id="test-btn">&#9654; <span data-i18n="test">Test</span></button>
+      <button class="btn btn-primary" id="fe-save-btn" data-i18n="save">Save</button>
     </div>
 
     <div class="debugger-bar" id="debugger-bar">
-      <button class="dbg-btn run" id="dbg-run" title="Run (F5)">&#9654; Run</button>
-      <button class="dbg-btn step" id="dbg-step" title="Step Over (F10)">&#x21B7; Step</button>
-      <button class="dbg-btn pause" id="dbg-pause" title="Pause (F6)">&#x23F8; Pause</button>
-      <button class="dbg-btn stop" id="dbg-stop" title="Stop (Shift+F5)">&#x25A0; Stop</button>
+      <button class="dbg-btn run" id="dbg-run" data-i18n-title="runF5">&#9654; <span data-i18n="run">Run</span></button>
+      <button class="dbg-btn step" id="dbg-step" data-i18n-title="stepOver">&#x21B7; <span data-i18n="step">Step</span></button>
+      <button class="dbg-btn pause" id="dbg-pause" data-i18n-title="pauseF6">&#x23F8; <span data-i18n="pause">Pause</span></button>
+      <button class="dbg-btn stop" id="dbg-stop" data-i18n-title="stopShiftF5">&#x25A0; <span data-i18n="stop">Stop</span></button>
       <div class="dbg-state">
-        <span class="state-label" id="dbg-state-label">idle</span>
+        <span class="state-label" id="dbg-state-label" data-i18n="idle">idle</span>
         <span id="dbg-state-info"></span>
       </div>
     </div>
 
     <div class="flow-settings">
       <div>
-        <label>Trigger</label>
+        <label data-i18n="trigger">Trigger</label>
         <select id="flow-trigger">
-          <option value="manual">Manual</option>
-          <option value="page_load">Page Load</option>
-          <option value="page_idle">Page Idle</option>
+          <option value="manual" data-i18n="triggerManual">Manual</option>
+          <option value="page_load" data-i18n="triggerPageLoad">Page Load</option>
+          <option value="page_idle" data-i18n="triggerPageIdle">Page Idle</option>
         </select>
       </div>
       <div>
         <label style="display:flex;align-items:center;gap:4px;">
           <input type="checkbox" id="flow-enabled" checked>
-          Enabled
+          <span data-i18n="enabled">Enabled</span>
         </label>
       </div>
       <div id="flow-match-row" style="width:100%;">
-        <label>URL Match</label>
+        <label data-i18n="urlMatch">URL Match</label>
         <textarea id="flow-match" placeholder="*://example.com/*" rows="2"></textarea>
         <div id="flow-match-hint" class="match-hint"></div>
       </div>
@@ -1286,12 +1295,12 @@
 
     <div class="vars-panel">
       <div class="vars-toggle" id="vars-toggle">
-        <span>Variables</span>
+        <span data-i18n="variables">Variables</span>
         <span class="arrow" id="vars-arrow">&#9654;</span>
       </div>
       <div class="vars-body" id="vars-body">
         <div id="vars-list"></div>
-        <button class="add-var-btn" id="add-var-btn">+ Add variable</button>
+        <button class="add-var-btn" id="add-var-btn" data-i18n="addVariable">+ Add variable</button>
       </div>
     </div>
 
@@ -1300,7 +1309,7 @@
     <div class="block-picker-overlay" id="picker-overlay">
       <div class="block-picker">
         <div class="block-picker-search">
-          <input type="text" id="picker-search" placeholder="Search blocks...">
+          <input type="text" id="picker-search" placeholder="Search blocks..." data-i18n-placeholder="searchBlocks">
         </div>
         <div class="block-picker-list" id="picker-list"></div>
       </div>
@@ -1308,9 +1317,9 @@
 
     <div class="bottom-panels" id="bottom-panels">
       <div class="panel-tabs">
-        <div class="panel-tab active" data-panel="vars">Variables <span class="badge" id="vars-count">0</span></div>
-        <div class="panel-tab" data-panel="log">Log <span class="badge" id="log-count">0</span></div>
-        <div class="panel-tab" data-panel="timeline">Timeline <span class="badge" id="tl-count">0</span></div>
+        <div class="panel-tab active" data-panel="vars"><span data-i18n="variables">Variables</span> <span class="badge" id="vars-count">0</span></div>
+        <div class="panel-tab" data-panel="log"><span data-i18n="log">Log</span> <span class="badge" id="log-count">0</span></div>
+        <div class="panel-tab" data-panel="timeline"><span data-i18n="timeline">Timeline</span> <span class="badge" id="tl-count">0</span></div>
         <button class="panel-close" id="panels-close">&times;</button>
       </div>
       <div class="panel-content active" id="panel-vars" data-panel="vars"></div>
