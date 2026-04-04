@@ -427,81 +427,760 @@
       gap: 4px;
     }
   </style>
+
+  <!-- ===== Flow Editor styles ===== -->
+  <style>
+    :root {
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+      --cat-action: #107c10;
+      --cat-wait: #ca5010;
+      --cat-data: #0078d4;
+      --cat-logic: #881798;
+      --cat-output: #038387;
+      --cat-custom: #69797e;
+    }
+    /* Override .btn flex for flow editor view */
+    #view-flow .btn { flex: initial; }
+
+    /* === Top bar === */
+    #view-flow .top-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--shadow);
+    }
+    #view-flow .back-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: var(--text-sec);
+      padding: 4px;
+    }
+    #view-flow .back-btn:hover { color: var(--text); }
+    .flow-name-input {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      padding: 4px 6px;
+      border-radius: 4px;
+    }
+    .flow-name-input:focus {
+      outline: none;
+      background: var(--bg);
+    }
+    #view-flow .top-bar .btn {
+      padding: 5px 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-success { background: #107c10; color: #fff; }
+    .btn-success:hover { background: #0b5a0b; }
+
+    /* === Flow settings row === */
+    .flow-settings {
+      max-width: 100%;
+      margin: 12px 0 0;
+      padding: 0 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .flow-settings label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+    }
+    .flow-settings select,
+    .flow-settings input[type="text"] {
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      background: var(--surface);
+    }
+    .flow-settings select:focus,
+    .flow-settings input:focus { outline: none; border-color: var(--primary); }
+
+    /* === Block canvas === */
+    .canvas {
+      max-width: 100%;
+      margin: 12px 0;
+      padding: 0 12px 100px;
+    }
+
+    /* === Block card === */
+    .block-card {
+      background: var(--surface);
+      border-radius: 8px;
+      border-left: 4px solid var(--cat-action);
+      box-shadow: var(--shadow);
+      margin-bottom: 8px;
+      transition: box-shadow 0.15s, opacity 0.15s;
+      position: relative;
+    }
+    .block-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+    .block-card.dragging { opacity: 0.5; }
+    .block-card.drag-over { box-shadow: 0 -2px 0 var(--primary), 0 2px 8px rgba(0,0,0,0.12); }
+    .block-card[data-category="action"] { border-left-color: var(--cat-action); }
+    .block-card[data-category="wait"] { border-left-color: var(--cat-wait); }
+    .block-card[data-category="data"] { border-left-color: var(--cat-data); }
+    .block-card[data-category="logic"] { border-left-color: var(--cat-logic); }
+    .block-card[data-category="output"] { border-left-color: var(--cat-output); }
+    .block-card[data-category="custom"] { border-left-color: var(--cat-custom); }
+
+    .block-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .block-drag-handle {
+      cursor: grab;
+      color: #ccc;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .block-drag-handle:active { cursor: grabbing; }
+    .block-label {
+      font-weight: 600;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .block-summary {
+      color: var(--text-sec);
+      font-size: 12px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .block-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .block-action-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .block-action-btn:hover { background: #f0f0f0; color: var(--text); }
+    .block-action-btn.delete:hover { color: var(--danger); }
+
+    .block-body {
+      display: none;
+      padding: 0 12px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .block-card.expanded .block-body { display: block; }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .field-row label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      min-width: 60px;
+      flex-shrink: 0;
+    }
+    .field-row input,
+    .field-row select,
+    .field-row textarea {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: inherit;
+      background: var(--surface);
+    }
+    .field-row textarea {
+      min-height: 60px;
+      resize: vertical;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    .field-row input:focus,
+    .field-row select:focus,
+    .field-row textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .picker-btn {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .picker-btn:hover { background: var(--bg); border-color: var(--primary); }
+    .picker-btn.active { background: #fff3cd; border-color: #ffc107; }
+    .field-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .field-checkbox label {
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    /* === Nested blocks === */
+    .nested-container { margin-top: 10px; }
+    .nested-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 0 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .nested-blocks {
+      padding: 8px;
+      background: #f9f9f9;
+      border-radius: 6px;
+      border: 1px dashed var(--border);
+      min-height: 40px;
+    }
+    .nested-blocks .block-card { margin-bottom: 6px; }
+    .nested-blocks .block-card:last-child { margin-bottom: 0; }
+    .nested-blocks .add-block-btn { margin: 6px 0 0; }
+
+    /* === Add block button === */
+    .add-block-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 10px;
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-sec);
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .add-block-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* === Block picker modal === */
+    .block-picker-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+    .block-picker-overlay.open { display: flex; }
+    .block-picker {
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      width: calc(100% - 24px);
+      max-width: 360px;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .block-picker-search {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .block-picker-search input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .block-picker-search input:focus { outline: none; border-color: var(--primary); }
+    .block-picker-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .block-picker-category {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 8px 4px;
+      color: var(--text-sec);
+    }
+    .block-picker-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .block-picker-item:hover { background: var(--bg); }
+    .block-picker-item .bpi-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* === Variables panel === */
+    .vars-panel {
+      max-width: 100%;
+      margin: 0;
+      padding: 0 12px;
+    }
+    .vars-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      user-select: none;
+    }
+    .vars-toggle .arrow { transition: transform 0.15s; font-size: 10px; }
+    .vars-toggle .arrow.open { transform: rotate(90deg); }
+    .vars-body { display: none; padding-bottom: 12px; }
+    .vars-body.open { display: block; }
+    .var-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+      align-items: center;
+    }
+    .var-row input {
+      flex: 1;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .var-row input:focus { outline: none; border-color: var(--primary); }
+    .var-row .var-delete {
+      background: none;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+    }
+    .var-row .var-delete:hover { color: var(--danger); }
+    .add-var-btn {
+      font-size: 12px;
+      color: var(--primary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+    .add-var-btn:hover { text-decoration: underline; }
+
+    /* === Connector line === */
+    .connector {
+      width: 2px;
+      height: 8px;
+      background: var(--border);
+      margin: 0 auto;
+    }
+
+    /* === Debugger bar === */
+    .debugger-bar {
+      display: none;
+      position: sticky;
+      top: 43px;
+      z-index: 99;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 6px 12px;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      border-bottom: 1px solid #333;
+    }
+    .debugger-bar.active { display: flex; }
+    .dbg-btn {
+      padding: 4px 12px;
+      border: 1px solid #555;
+      border-radius: 4px;
+      background: #2d2d2d;
+      color: #d4d4d4;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .dbg-btn:hover { background: #3d3d3d; border-color: #888; }
+    .dbg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .dbg-btn.run { color: #4ec9b0; border-color: #4ec9b0; }
+    .dbg-btn.step { color: #dcdcaa; border-color: #dcdcaa; }
+    .dbg-btn.pause { color: #ce9178; border-color: #ce9178; }
+    .dbg-btn.stop { color: #f44747; border-color: #f44747; }
+    .dbg-state {
+      flex: 1;
+      font-size: 11px;
+      color: #888;
+    }
+    .dbg-state .state-label { font-weight: 600; }
+    .dbg-state .state-label.running { color: #4ec9b0; }
+    .dbg-state .state-label.paused { color: #dcdcaa; }
+    .dbg-state .state-label.done { color: #6a9955; }
+    .dbg-state .state-label.error { color: #f44747; }
+
+    .block-card.dbg-current {
+      outline: 2px solid #4ec9b0;
+      outline-offset: 1px;
+    }
+    .block-card.dbg-paused {
+      outline: 2px solid #dcdcaa;
+      outline-offset: 1px;
+    }
+    .block-card.dbg-done { position: relative; }
+    .block-card.dbg-done::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(106, 153, 85, 0.06);
+      pointer-events: none;
+      border-radius: 8px;
+    }
+    .block-card.dbg-error {
+      outline: 2px solid #f44747;
+      outline-offset: 1px;
+    }
+
+    /* === Bottom panels === */
+    .bottom-panels {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 98;
+      display: none;
+      flex-direction: column;
+      max-height: 45vh;
+      background: #1e1e1e;
+      border-top: 2px solid #333;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 11px;
+    }
+    .bottom-panels.active { display: flex; }
+    .panel-tabs {
+      display: flex;
+      background: #252526;
+      border-bottom: 1px solid #333;
+    }
+    .panel-tab {
+      padding: 6px 16px;
+      cursor: pointer;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      font-size: 11px;
+      font-weight: 600;
+      user-select: none;
+    }
+    .panel-tab:hover { color: #ccc; }
+    .panel-tab.active { color: #d4d4d4; border-bottom-color: var(--primary); }
+    .panel-tab .badge {
+      display: inline-block;
+      background: #555;
+      color: #ddd;
+      border-radius: 8px;
+      padding: 0 6px;
+      font-size: 10px;
+      margin-left: 4px;
+    }
+    .panel-close {
+      margin-left: auto;
+      padding: 6px 12px;
+      cursor: pointer;
+      color: #888;
+      background: none;
+      border: none;
+      font-size: 14px;
+    }
+    .panel-close:hover { color: #fff; }
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 16px;
+      display: none;
+    }
+    .panel-content.active { display: block; }
+    .var-inspector-row {
+      display: flex;
+      padding: 3px 0;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .var-inspector-row:last-child { border-bottom: none; }
+    .var-inspector-name {
+      color: #9cdcfe;
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .var-inspector-eq {
+      color: #666;
+      margin: 0 8px;
+    }
+    .var-inspector-val {
+      color: #ce9178;
+      word-break: break-all;
+    }
+    .var-inspector-val.changed {
+      color: #4ec9b0;
+      font-weight: 600;
+    }
+    .var-inspector-empty {
+      color: #555;
+      font-style: italic;
+      padding: 8px 0;
+    }
+    .log-entry {
+      display: flex;
+      gap: 8px;
+      padding: 2px 0;
+      line-height: 1.6;
+    }
+    .log-time { color: #555; flex-shrink: 0; }
+    .log-icon { flex-shrink: 0; width: 16px; text-align: center; }
+    .log-msg { color: #d4d4d4; }
+    .log-msg.error { color: #f44747; }
+    .log-msg.info { color: #4ec9b0; }
+    .log-msg.warn { color: #dcdcaa; }
+    .log-empty {
+      color: #555;
+      font-style: italic;
+      padding: 8px 0;
+    }
+    .tl-entry {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .tl-entry:last-child { border-bottom: none; }
+    .tl-index {
+      color: #555;
+      min-width: 24px;
+      text-align: right;
+    }
+    .tl-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .tl-dot.ok { background: #6a9955; }
+    .tl-dot.err { background: #f44747; }
+    .tl-label { color: #d4d4d4; flex: 1; }
+    .tl-duration { color: #888; font-size: 10px; }
+    .tl-error { color: #f44747; font-size: 10px; }
+
+    .empty-canvas {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-sec);
+    }
+    .empty-canvas p { margin-bottom: 12px; }
+  </style>
 </head>
 <body>
-  <!-- Current workspace info + actions -->
-  <div class="current-ws" id="current-ws">
-    <span class="ws-label" id="current-ws-label">No workspace detected</span>
-    <div class="current-ws-meta" id="current-ws-meta" style="display:none"></div>
-    <div class="current-ws-actions" id="current-ws-actions" style="display:none">
-      <button class="btn btn-primary btn-sm" id="quick-save-btn">Save</button>
-      <button class="btn btn-danger btn-sm" id="quick-delete-btn">Delete</button>
+
+  <!-- ===== Main view (workspace list) ===== -->
+  <div id="view-main">
+    <!-- Current workspace info + actions -->
+    <div class="current-ws" id="current-ws">
+      <span class="ws-label" id="current-ws-label">No workspace detected</span>
+      <div class="current-ws-meta" id="current-ws-meta" style="display:none"></div>
+      <div class="current-ws-actions" id="current-ws-actions" style="display:none">
+        <button class="btn btn-primary btn-sm" id="quick-save-btn">Save</button>
+        <button class="btn btn-danger btn-sm" id="quick-delete-btn">Delete</button>
+      </div>
+    </div>
+
+    <!-- Save as new workspace (collapsible when in a workspace) -->
+    <div class="save-new-toggle" id="save-new-toggle" style="display:none">
+      <span>Save as New Workspace</span>
+      <span class="arrow" id="save-new-arrow">&#9654;</span>
+    </div>
+    <div class="save-section" id="save-section">
+      <input type="text" id="ws-name" placeholder="Workspace name">
+      <div class="color-picker" id="color-picker"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="save-btn">Save Window</button>
+        <button class="btn btn-secondary" id="save-all-btn">Save All</button>
+      </div>
+    </div>
+
+    <!-- Sync bar -->
+    <div class="sync-bar" id="sync-bar" style="display:none">
+      <button class="btn btn-primary btn-sm" id="sync-btn">Sync</button>
+      <span class="sync-status" id="sync-status"></span>
+      <label class="auto-sync-toggle">
+        <input type="checkbox" id="auto-sync-checkbox" checked>
+        Auto
+      </label>
+    </div>
+
+    <!-- Conflict banner -->
+    <div id="conflict-banner" class="conflict-banner" style="display:none"></div>
+
+    <!-- Flow runner log -->
+    <div class="flow-log-panel" id="flow-log-panel">
+      <div class="flow-log-header">
+        <span>Flow: <span id="flow-log-name"></span></span>
+        <span>
+          <span class="flow-state" id="flow-log-state"></span>
+          <button class="flow-log-close" id="flow-log-close">&times;</button>
+        </span>
+      </div>
+      <div class="flow-log-body" id="flow-log-body"></div>
+    </div>
+
+    <!-- Workspace list -->
+    <div class="list-header">Saved Workspaces</div>
+    <div id="ws-list"></div>
+
+    <!-- Settings -->
+    <div class="settings-toggle" id="settings-toggle">
+      <span>Sync Settings</span>
+      <span class="arrow" id="settings-arrow">&#9654;</span>
+    </div>
+    <div class="settings-panel" id="settings-panel">
+      <label for="server-url">Server URL</label>
+      <input type="url" id="server-url" placeholder="http://localhost:3000">
+      <label for="sync-token">Sync Token</label>
+      <input type="text" id="sync-token" placeholder="tb_xxxxxxxxxxxx">
+      <div class="settings-status" id="settings-status"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="save-settings-btn">Save</button>
+        <button class="btn btn-secondary btn-sm" id="test-conn-btn">Test</button>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <button class="btn btn-danger btn-sm" id="clear-all-btn">Clear All</button>
     </div>
   </div>
 
-  <!-- Save as new workspace (collapsible when in a workspace) -->
-  <div class="save-new-toggle" id="save-new-toggle" style="display:none">
-    <span>Save as New Workspace</span>
-    <span class="arrow" id="save-new-arrow">&#9654;</span>
-  </div>
-  <div class="save-section" id="save-section">
-    <input type="text" id="ws-name" placeholder="Workspace name">
-    <div class="color-picker" id="color-picker"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="save-btn">Save Window</button>
-      <button class="btn btn-secondary" id="save-all-btn">Save All</button>
+  <!-- ===== Flow editor view ===== -->
+  <div id="view-flow" style="display:none">
+    <div class="top-bar">
+      <button class="back-btn" id="back-btn" title="Back">&larr;</button>
+      <input type="text" class="flow-name-input" id="flow-name" placeholder="Flow name" value="New Flow">
+      <button class="btn btn-success" id="test-btn">&#9654; Test</button>
+      <button class="btn btn-primary" id="fe-save-btn">Save</button>
     </div>
-  </div>
 
-  <!-- Sync bar -->
-  <div class="sync-bar" id="sync-bar" style="display:none">
-    <button class="btn btn-primary btn-sm" id="sync-btn">Sync</button>
-    <span class="sync-status" id="sync-status"></span>
-    <label class="auto-sync-toggle">
-      <input type="checkbox" id="auto-sync-checkbox" checked>
-      Auto
-    </label>
-  </div>
-
-  <!-- Conflict banner -->
-  <div id="conflict-banner" class="conflict-banner" style="display:none"></div>
-
-  <!-- Flow runner log -->
-  <div class="flow-log-panel" id="flow-log-panel">
-    <div class="flow-log-header">
-      <span>Flow: <span id="flow-log-name"></span></span>
-      <span>
-        <span class="flow-state" id="flow-log-state"></span>
-        <button class="flow-log-close" id="flow-log-close">&times;</button>
-      </span>
+    <div class="debugger-bar" id="debugger-bar">
+      <button class="dbg-btn run" id="dbg-run" title="Run (F5)">&#9654; Run</button>
+      <button class="dbg-btn step" id="dbg-step" title="Step Over (F10)">&#x21B7; Step</button>
+      <button class="dbg-btn pause" id="dbg-pause" title="Pause (F6)">&#x23F8; Pause</button>
+      <button class="dbg-btn stop" id="dbg-stop" title="Stop (Shift+F5)">&#x25A0; Stop</button>
+      <div class="dbg-state">
+        <span class="state-label" id="dbg-state-label">idle</span>
+        <span id="dbg-state-info"></span>
+      </div>
     </div>
-    <div class="flow-log-body" id="flow-log-body"></div>
-  </div>
 
-  <!-- Workspace list -->
-  <div class="list-header">Saved Workspaces</div>
-  <div id="ws-list"></div>
-
-  <!-- Settings -->
-  <div class="settings-toggle" id="settings-toggle">
-    <span>Sync Settings</span>
-    <span class="arrow" id="settings-arrow">&#9654;</span>
-  </div>
-  <div class="settings-panel" id="settings-panel">
-    <label for="server-url">Server URL</label>
-    <input type="url" id="server-url" placeholder="http://localhost:3000">
-    <label for="sync-token">Sync Token</label>
-    <input type="text" id="sync-token" placeholder="tb_xxxxxxxxxxxx">
-    <div class="settings-status" id="settings-status"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary btn-sm" id="save-settings-btn">Save</button>
-      <button class="btn btn-secondary btn-sm" id="test-conn-btn">Test</button>
+    <div class="flow-settings">
+      <div>
+        <label>Trigger</label>
+        <select id="flow-trigger">
+          <option value="manual">Manual</option>
+          <option value="page_load">Page Load</option>
+          <option value="page_idle">Page Idle</option>
+        </select>
+      </div>
+      <div>
+        <label>URL Match</label>
+        <input type="text" id="flow-match" placeholder="*://example.com/*" style="width: 140px;">
+      </div>
+      <div>
+        <label style="display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="flow-enabled" checked>
+          Enabled
+        </label>
+      </div>
     </div>
-  </div>
 
-  <!-- Footer -->
-  <div class="footer">
-    <button class="btn btn-danger btn-sm" id="clear-all-btn">Clear All</button>
+    <div class="vars-panel">
+      <div class="vars-toggle" id="vars-toggle">
+        <span>Variables</span>
+        <span class="arrow" id="vars-arrow">&#9654;</span>
+      </div>
+      <div class="vars-body" id="vars-body">
+        <div id="vars-list"></div>
+        <button class="add-var-btn" id="add-var-btn">+ Add variable</button>
+      </div>
+    </div>
+
+    <div class="canvas" id="canvas"></div>
+
+    <div class="block-picker-overlay" id="picker-overlay">
+      <div class="block-picker">
+        <div class="block-picker-search">
+          <input type="text" id="picker-search" placeholder="Search blocks...">
+        </div>
+        <div class="block-picker-list" id="picker-list"></div>
+      </div>
+    </div>
+
+    <div class="bottom-panels" id="bottom-panels">
+      <div class="panel-tabs">
+        <div class="panel-tab active" data-panel="vars">Variables <span class="badge" id="vars-count">0</span></div>
+        <div class="panel-tab" data-panel="log">Log <span class="badge" id="log-count">0</span></div>
+        <div class="panel-tab" data-panel="timeline">Timeline <span class="badge" id="tl-count">0</span></div>
+        <button class="panel-close" id="panels-close">&times;</button>
+      </div>
+      <div class="panel-content active" id="panel-vars" data-panel="vars"></div>
+      <div class="panel-content" id="panel-log" data-panel="log"></div>
+      <div class="panel-content" id="panel-timeline" data-panel="timeline"></div>
+    </div>
   </div>
 
   <script type="module" src="sidepanel.js"></script>

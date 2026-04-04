@@ -10,8 +10,11 @@ import { captureWindow } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES } from './lib/flow-schema.js';
+import { mountFlowEditor, unmountFlowEditor } from './flow-editor.js';
 
 const MARKER_URL = 'about:blank#ws-marker';
+const viewMain = document.getElementById('view-main');
+const viewFlow = document.getElementById('view-flow');
 
 // --- DOM refs ---
 const nameInput = document.getElementById('ws-name');
@@ -264,23 +267,14 @@ async function quickDeleteCurrentWorkspace() {
   }
 }
 
-// --- Render workspace list ---
-async function renderList() {
-  const workspaces = await getAll();
+// --- Render workspace list (differential) ---
 
-  if (workspaces.length === 0) {
-    wsList.innerHTML = '<div class="empty-state">No saved workspaces.</div>';
-    return;
-  }
+// Cache of last-rendered card HTML keyed by workspace id
+let _renderedCards = new Map();
+let _renderedOrder = []; // ordered workspace ids from last render
 
-  // Sort by savedAt descending
-  workspaces.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
-
-  // Load flows for all workspaces
-  const allFlows = await getFlows();
-
-  wsList.innerHTML = workspaces.map(w => `
-    <div class="ws-card" style="border-left-color:${w.color}" data-id="${w.id}">
+function buildCardHtml(w, wsFlows) {
+  return `
       <div class="ws-card-header">
         <div class="ws-card-dot" style="background:${w.color}"></div>
         <div class="ws-card-name">${escapeHtml(w.name)}</div>
@@ -290,75 +284,120 @@ async function renderList() {
         ${w.tabs.length} tab${w.tabs.length !== 1 ? 's' : ''} · ${w.groups.length} group${w.groups.length !== 1 ? 's' : ''} · ${formatTime(w.savedAt)}
       </div>
       ${renderConflictSection(w)}
-      ${renderFlowChips(w.id, allFlows[w.id])}
+      ${renderFlowChips(w.id, wsFlows)}
       <div class="ws-card-actions">
         <button class="btn btn-primary btn-sm" data-restore="${w.id}">Restore</button>
         <button class="btn btn-danger btn-sm" data-delete="${w.id}">Delete</button>
-      </div>
-    </div>
-  `).join('');
-
-  // Event delegation
-  wsList.querySelectorAll('[data-restore]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      const ws = workspaces.find(w => w.id === btn.dataset.restore);
-      if (ws) await restoreWorkspace(ws);
-      btn.disabled = false;
-    });
-  });
-
-  wsList.querySelectorAll('[data-delete]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const ws = workspaces.find(w => w.id === btn.dataset.delete);
-      if (!confirm(`Delete "${ws?.name}"?`)) return;
-      await remove(btn.dataset.delete);
-      await renderList();
-      triggerAutoSync();
-    });
-  });
-
-  // Conflict resolution buttons
-  wsList.querySelectorAll('[data-resolve]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      await resolveConflict(btn.dataset.resolve, btn.dataset.action);
-      btn.disabled = false;
-    });
-  });
-
-  // Flow buttons — click to edit, dblclick to rename
-  wsList.querySelectorAll('[data-edit-flow]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openFlowEditor(el.dataset.ws, el.dataset.editFlow);
-    });
-    el.addEventListener('dblclick', (e) => {
-      e.stopPropagation();
-      startRenameFlow(el, el.dataset.ws, el.dataset.editFlow);
-    });
-  });
-
-  wsList.querySelectorAll('[data-run-flow]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      runFlowOnActiveTab(el.dataset.ws, el.dataset.runFlow);
-    });
-  });
-
-  wsList.querySelectorAll('[data-del-flow]').forEach(el => {
-    el.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (!confirm('Delete this flow?')) return;
-      await removeFlow(el.dataset.ws, el.dataset.delFlow);
-      await renderList();
-    });
-  });
-
-  wsList.querySelectorAll('[data-add-flow]').forEach(btn => {
-    btn.addEventListener('click', () => addNewFlow(btn.dataset.addFlow));
-  });
+      </div>`;
 }
+
+async function renderList() {
+  const workspaces = await getAll();
+
+  if (workspaces.length === 0) {
+    wsList.innerHTML = '<div class="empty-state">No saved workspaces.</div>';
+    _renderedCards.clear();
+    _renderedOrder = [];
+    return;
+  }
+
+  // Sort by savedAt descending
+  workspaces.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+
+  // Build flows map from cached data (getFlows uses cached getAll internally)
+  const allFlows = await getFlows();
+
+  const newOrder = workspaces.map(w => w.id);
+  const orderChanged = newOrder.length !== _renderedOrder.length ||
+    newOrder.some((id, i) => id !== _renderedOrder[i]);
+
+  // Build new card HTML map
+  const newCards = new Map();
+  for (const w of workspaces) {
+    newCards.set(w.id, { html: buildCardHtml(w, allFlows[w.id]), color: w.color });
+  }
+
+  if (orderChanged) {
+    // Order changed (added, removed, reordered) — rebuild DOM but reuse unchanged nodes
+    const fragment = document.createDocumentFragment();
+    for (const w of workspaces) {
+      const card = newCards.get(w.id);
+      const existing = wsList.querySelector(`.ws-card[data-id="${w.id}"]`);
+      if (existing && _renderedCards.get(w.id)?.html === card.html) {
+        // Reuse unchanged DOM node
+        fragment.appendChild(existing);
+      } else {
+        // Create new card
+        const el = document.createElement('div');
+        el.className = 'ws-card';
+        el.style.borderLeftColor = card.color;
+        el.dataset.id = w.id;
+        el.innerHTML = card.html;
+        fragment.appendChild(el);
+      }
+    }
+    wsList.innerHTML = '';
+    wsList.appendChild(fragment);
+  } else {
+    // Same order — only patch changed cards in-place
+    for (const w of workspaces) {
+      const card = newCards.get(w.id);
+      if (_renderedCards.get(w.id)?.html === card.html) continue;
+      const el = wsList.querySelector(`.ws-card[data-id="${w.id}"]`);
+      if (el) {
+        el.style.borderLeftColor = card.color;
+        el.innerHTML = card.html;
+      }
+    }
+  }
+
+  _renderedCards = newCards;
+  _renderedOrder = newOrder;
+}
+
+// --- Event delegation on wsList (single listener, never re-attached) ---
+wsList.addEventListener('click', async (e) => {
+  const target = e.target.closest('[data-restore], [data-delete], [data-resolve], [data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
+  if (!target) return;
+
+  if (target.dataset.restore) {
+    target.disabled = true;
+    const ws = await getById(target.dataset.restore);
+    if (ws) await restoreWorkspace(ws);
+    target.disabled = false;
+  } else if (target.dataset.delete) {
+    const ws = await getById(target.dataset.delete);
+    if (!confirm(`Delete "${ws?.name}"?`)) return;
+    await remove(target.dataset.delete);
+    await renderList();
+    triggerAutoSync();
+  } else if (target.dataset.resolve) {
+    target.disabled = true;
+    await resolveConflict(target.dataset.resolve, target.dataset.action);
+    target.disabled = false;
+  } else if (target.dataset.editFlow) {
+    e.stopPropagation();
+    openFlowEditor(target.dataset.ws, target.dataset.editFlow);
+  } else if (target.dataset.runFlow) {
+    e.stopPropagation();
+    runFlowOnActiveTab(target.dataset.ws, target.dataset.runFlow);
+  } else if (target.dataset.delFlow) {
+    e.stopPropagation();
+    if (!confirm('Delete this flow?')) return;
+    await removeFlow(target.dataset.ws, target.dataset.delFlow);
+    await renderList();
+  } else if (target.dataset.addFlow) {
+    addNewFlow(target.dataset.addFlow);
+  }
+});
+
+// Double-click for flow rename (separate listener since dblclick doesn't bubble the same way)
+wsList.addEventListener('dblclick', (e) => {
+  const el = e.target.closest('[data-edit-flow]');
+  if (!el) return;
+  e.stopPropagation();
+  startRenameFlow(el, el.dataset.ws, el.dataset.editFlow);
+});
 
 // --- Helpers ---
 function escapeHtml(str) {
@@ -776,28 +815,40 @@ async function startRenameFlow(el, workspaceId, flowId) {
   });
 }
 
-function openFlowEditor(workspaceId, flowId) {
-  location.href = `flow-editor.html?ws=${workspaceId}&flow=${flowId}`;
+function openFlowEditor(wsId, flowId) {
+  viewMain.style.display = 'none';
+  viewFlow.style.display = '';
+  mountFlowEditor(wsId, flowId, () => {
+    // Back button callback
+    unmountFlowEditor();
+    viewFlow.style.display = 'none';
+    viewMain.style.display = '';
+    renderList();
+    detectCurrentWorkspace();
+  });
 }
 
 async function addNewFlow(workspaceId) {
   const flow = createFlow('New Flow');
   await saveFlow(workspaceId, flow);
   openFlowEditor(workspaceId, flow.id);
-  await renderList();
 }
 
-// --- Init ---
+// --- Init (progressive: show content fast, defer heavy work) ---
 initColorPicker();
-detectCurrentWorkspace();
-renderList();
-renderConflictBanner();
-loadSettings();
-updateSyncBar();
 
-// Auto-sync on panel open
-isSyncConfigured().then(configured => {
-  if (configured) doSync();
+// Phase 1: render visible content quickly
+Promise.all([
+  detectCurrentWorkspace(),
+  renderList(),
+]).then(() => {
+  // Phase 2: non-critical UI + sync (deferred)
+  renderConflictBanner();
+  loadSettings();
+  updateSyncBar();
+  isSyncConfigured().then(configured => {
+    if (configured) doSync();
+  });
 });
 
 // Re-render when background auto-sync updates workspaces

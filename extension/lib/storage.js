@@ -22,34 +22,83 @@ export function generateId() {
   return crypto.randomUUID();
 }
 
+// --- In-memory cache (survives page navigation via sessionStorage) ---
+const _CACHE_KEY = '_tabsy_ws';
+let _cache = null; // null = not loaded yet
+
+// On module load: try to restore from sessionStorage (synchronous, instant)
+try {
+  const stored = sessionStorage.getItem(_CACHE_KEY);
+  if (stored) _cache = JSON.parse(stored);
+} catch { /* ignore parse errors */ }
+
+function _persistCache() {
+  try { sessionStorage.setItem(_CACHE_KEY, JSON.stringify(_cache)); } catch {}
+}
+
+async function _ensureCache() {
+  if (_cache !== null) return _cache;
+  const { workspaces = [] } = await chrome.storage.local.get('workspaces');
+  _cache = workspaces;
+  _persistCache();
+  return _cache;
+}
+
+// If cache was restored from sessionStorage, validate against chrome.storage in background
+if (_cache !== null) {
+  chrome.storage.local.get('workspaces').then(({ workspaces = [] }) => {
+    // Compare by length + IDs + savedAt timestamps (cheap check)
+    const stale = _cache.length !== workspaces.length ||
+      _cache.some((w, i) => w.id !== workspaces[i]?.id || w.savedAt !== workspaces[i]?.savedAt);
+    if (stale) {
+      _cache = workspaces;
+      _persistCache();
+    }
+  });
+}
+
+// Invalidate cache when storage changes from another context (background, other tab)
+if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.workspaces) {
+      _cache = changes.workspaces.newValue || [];
+      _persistCache();
+    }
+  });
+}
+
 // --- Workspace CRUD ---
 
 export async function getAll() {
-  const { workspaces = [] } = await chrome.storage.local.get('workspaces');
-  return workspaces;
+  const all = await _ensureCache();
+  return all;
 }
 
 export async function getById(id) {
-  const all = await getAll();
+  const all = await _ensureCache();
   return all.find(w => w.id === id) || null;
 }
 
 export async function save(workspace) {
-  const all = await getAll();
+  const all = await _ensureCache();
   const idx = all.findIndex(w => w.id === workspace.id);
   if (idx >= 0) {
     all[idx] = workspace;
   } else {
     all.push(workspace);
   }
+  _cache = all;
+  _persistCache();
   await chrome.storage.local.set({ workspaces: all });
   return workspace;
 }
 
 export async function remove(id) {
-  const all = await getAll();
+  const all = await _ensureCache();
   const ws = all.find(w => w.id === id);
   const filtered = all.filter(w => w.id !== id);
+  _cache = filtered;
+  _persistCache();
   await chrome.storage.local.set({ workspaces: filtered });
   // Track deletion for sync (only if it was a synced workspace)
   if (ws && ws.syncStatus === 'synced') {
@@ -58,8 +107,10 @@ export async function remove(id) {
 }
 
 export async function clearAll() {
-  const all = await getAll();
+  const all = await _ensureCache();
   const syncedIds = all.filter(w => w.syncStatus === 'synced').map(w => w.id);
+  _cache = [];
+  _persistCache();
   await chrome.storage.local.set({ workspaces: [] });
   // Track all synced workspace deletions
   for (const id of syncedIds) {

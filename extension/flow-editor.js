@@ -13,34 +13,46 @@ let workspaceId = null;
 let pickerTarget = null; // { parentBlocks, index } — where to insert new block
 let expandedBlocks = new Set();
 let activePickerCallback = null; // for element picker
+let _onBack = null; // callback when user clicks back
 
-// --- Parse URL params ---
-const params = new URLSearchParams(location.search);
-workspaceId = params.get('ws');
-const flowId = params.get('flow');
-
-// --- DOM refs ---
-const flowNameInput = document.getElementById('flow-name');
-const flowTrigger = document.getElementById('flow-trigger');
-const flowMatch = document.getElementById('flow-match');
-const flowEnabled = document.getElementById('flow-enabled');
-const canvas = document.getElementById('canvas');
-const pickerOverlay = document.getElementById('picker-overlay');
-const pickerSearch = document.getElementById('picker-search');
-const pickerList = document.getElementById('picker-list');
-const saveBtn = document.getElementById('save-btn');
-const testBtn = document.getElementById('test-btn');
-const backBtn = document.getElementById('back-btn');
-const varsToggle = document.getElementById('vars-toggle');
-const varsArrow = document.getElementById('vars-arrow');
-const varsBody = document.getElementById('vars-body');
-const varsList = document.getElementById('vars-list');
-const addVarBtn = document.getElementById('add-var-btn');
+// --- DOM refs (resolved lazily — elements live in sidepanel.html) ---
+let _refs = null;
+function refs() {
+  if (!_refs) {
+    _refs = {
+      flowNameInput: document.getElementById('flow-name'),
+      flowTrigger:   document.getElementById('flow-trigger'),
+      flowMatch:     document.getElementById('flow-match'),
+      flowEnabled:   document.getElementById('flow-enabled'),
+      canvas:        document.getElementById('canvas'),
+      pickerOverlay: document.getElementById('picker-overlay'),
+      pickerSearch:  document.getElementById('picker-search'),
+      pickerList:    document.getElementById('picker-list'),
+      saveBtn:       document.getElementById('fe-save-btn'),
+      testBtn:       document.getElementById('test-btn'),
+      backBtn:       document.getElementById('back-btn'),
+      varsToggle:    document.getElementById('vars-toggle'),
+      varsArrow:     document.getElementById('vars-arrow'),
+      varsBody:      document.getElementById('vars-body'),
+      varsList:      document.getElementById('vars-list'),
+      addVarBtn:     document.getElementById('add-var-btn'),
+    };
+  }
+  return _refs;
+}
+// Convenience aliases (assigned after first mount)
+let flowNameInput, flowTrigger, flowMatch, flowEnabled, canvas,
+    pickerOverlay, pickerSearch, pickerList, saveBtn, testBtn, backBtn,
+    varsToggle, varsArrow, varsBody, varsList, addVarBtn;
 
 // --- Init ---
-async function init() {
-  if (workspaceId && flowId) {
-    const f = await getFlowById(workspaceId, flowId);
+let _mounted = false;
+let _eventsAttached = false;
+
+async function init(wsId, fId) {
+  workspaceId = wsId;
+  if (wsId && fId) {
+    const f = await getFlowById(wsId, fId);
     if (f) {
       flow = f;
     }
@@ -52,6 +64,58 @@ async function init() {
   loadFlowToUI();
   renderCanvas();
   renderVars();
+}
+
+/**
+ * Mount the flow editor view (called from sidepanel.js)
+ */
+export async function mountFlowEditor(wsId, fId, onBack) {
+  // Resolve DOM refs on first mount
+  const r = refs();
+  flowNameInput = r.flowNameInput;
+  flowTrigger = r.flowTrigger;
+  flowMatch = r.flowMatch;
+  flowEnabled = r.flowEnabled;
+  canvas = r.canvas;
+  pickerOverlay = r.pickerOverlay;
+  pickerSearch = r.pickerSearch;
+  pickerList = r.pickerList;
+  saveBtn = r.saveBtn;
+  testBtn = r.testBtn;
+  backBtn = r.backBtn;
+  varsToggle = r.varsToggle;
+  varsArrow = r.varsArrow;
+  varsBody = r.varsBody;
+  varsList = r.varsList;
+  addVarBtn = r.addVarBtn;
+
+  _onBack = onBack;
+  flow = null;
+  expandedBlocks.clear();
+
+  // Attach event listeners once
+  if (!_eventsAttached) {
+    attachEvents();
+    _eventsAttached = true;
+  }
+
+  _mounted = true;
+  await init(wsId, fId);
+}
+
+/**
+ * Unmount the flow editor view
+ */
+export function unmountFlowEditor() {
+  _mounted = false;
+  // Stop any running debugger
+  if (debugRunner && (debugRunner.state === RunState.RUNNING || debugRunner.state === RunState.PAUSED)) {
+    debugRunner.stop();
+  }
+  debugRunner = null;
+  // Reset debugger UI
+  if (debuggerBar) debuggerBar.classList.remove('active');
+  if (bottomPanels) bottomPanels.classList.remove('active');
 }
 
 function loadFlowToUI() {
@@ -556,15 +620,7 @@ function renderPickerList(query) {
   });
 }
 
-pickerSearch.addEventListener('input', () => renderPickerList(pickerSearch.value));
-pickerOverlay.addEventListener('click', (e) => {
-  if (e.target === pickerOverlay) closePicker();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (pickerOverlay.classList.contains('open')) closePicker();
-  }
-});
+// (event listeners moved to attachEvents())
 
 // --- Drag & drop ---
 
@@ -615,10 +671,7 @@ function onDragEnd(e) {
 
 // --- Variables panel ---
 
-varsToggle.addEventListener('click', () => {
-  varsBody.classList.toggle('open');
-  varsArrow.classList.toggle('open');
-});
+// (event listener moved to attachEvents())
 
 function renderVars() {
   varsList.innerHTML = '';
@@ -667,14 +720,7 @@ function renderVars() {
   }
 }
 
-addVarBtn.addEventListener('click', () => {
-  const name = `var${Object.keys(flow.variables).length + 1}`;
-  flow.variables[name] = '';
-  renderVars();
-  // Focus the last name input
-  const inputs = varsList.querySelectorAll('input[type="text"]');
-  if (inputs.length >= 2) inputs[inputs.length - 2].focus();
-});
+// (event listener moved to attachEvents())
 
 // --- Element Picker ---
 
@@ -914,52 +960,21 @@ function pickerScript() {
 
 // --- Save ---
 
-saveBtn.addEventListener('click', async () => {
-  readFlowFromUI();
-  if (workspaceId) {
-    await saveFlow(workspaceId, flow);
-    saveBtn.textContent = 'Saved!';
-    setTimeout(() => { saveBtn.textContent = 'Save'; }, 1500);
-  }
-});
+// (event listener moved to attachEvents())
 
 // ============================================================
 // Debugger
 // ============================================================
 
-const debuggerBar = document.getElementById('debugger-bar');
-const dbgRun = document.getElementById('dbg-run');
-const dbgStep = document.getElementById('dbg-step');
-const dbgPause = document.getElementById('dbg-pause');
-const dbgStop = document.getElementById('dbg-stop');
-const dbgStateLabel = document.getElementById('dbg-state-label');
-const dbgStateInfo = document.getElementById('dbg-state-info');
-const bottomPanels = document.getElementById('bottom-panels');
-const panelVars = document.getElementById('panel-vars');
-const panelLog = document.getElementById('panel-log');
-const panelTimeline = document.getElementById('panel-timeline');
-const varsCountBadge = document.getElementById('vars-count');
-const logCountBadge = document.getElementById('log-count');
-const tlCountBadge = document.getElementById('tl-count');
-const panelsClose = document.getElementById('panels-close');
+let debuggerBar, dbgRun, dbgStep, dbgPause, dbgStop, dbgStateLabel, dbgStateInfo,
+    bottomPanels, panelVars, panelLog, panelTimeline, varsCountBadge,
+    logCountBadge, tlCountBadge, panelsClose;
 
 let debugRunner = null;
 let debugLogCount = 0;
 let prevVarsSnapshot = {};
 
-// --- Panel tab switching ---
-document.querySelectorAll('.panel-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel-content').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.querySelector(`.panel-content[data-panel="${tab.dataset.panel}"]`).classList.add('active');
-  });
-});
-
-panelsClose.addEventListener('click', () => {
-  bottomPanels.classList.remove('active');
-});
+// (panel tab + close event listeners moved to attachEvents())
 
 // --- Find target tab (current window's active tab) ---
 async function findTargetTab() {
@@ -1183,80 +1198,130 @@ async function debugRun(stepMode = false) {
 
 // --- Debugger button handlers ---
 
-// Top bar test button → opens debugger in run mode
-testBtn.addEventListener('click', () => debugRun(false));
+// (debugger buttons, back button, keyboard shortcuts moved to attachEvents())
 
-// Debugger bar buttons
-dbgRun.addEventListener('click', () => {
-  if (debugRunner && debugRunner.state === RunState.PAUSED) {
-    debugRunner.stepMode = false;
-    debugRunner.resume();
-  } else {
-    debugRun(false);
-  }
-});
+// --- attachEvents: called once on first mount ---
+function attachEvents() {
+  // Resolve debugger DOM refs
+  debuggerBar = document.getElementById('debugger-bar');
+  dbgRun = document.getElementById('dbg-run');
+  dbgStep = document.getElementById('dbg-step');
+  dbgPause = document.getElementById('dbg-pause');
+  dbgStop = document.getElementById('dbg-stop');
+  dbgStateLabel = document.getElementById('dbg-state-label');
+  dbgStateInfo = document.getElementById('dbg-state-info');
+  bottomPanels = document.getElementById('bottom-panels');
+  panelVars = document.getElementById('panel-vars');
+  panelLog = document.getElementById('panel-log');
+  panelTimeline = document.getElementById('panel-timeline');
+  varsCountBadge = document.getElementById('vars-count');
+  logCountBadge = document.getElementById('log-count');
+  tlCountBadge = document.getElementById('tl-count');
+  panelsClose = document.getElementById('panels-close');
 
-dbgStep.addEventListener('click', () => {
-  if (debugRunner && debugRunner.state === RunState.PAUSED) {
-    debugRunner.step();
-  } else {
-    debugRun(true);
-  }
-});
+  // Picker
+  pickerSearch.addEventListener('input', () => renderPickerList(pickerSearch.value));
+  pickerOverlay.addEventListener('click', (e) => {
+    if (e.target === pickerOverlay) closePicker();
+  });
 
-dbgPause.addEventListener('click', () => {
-  if (debugRunner && debugRunner.state === RunState.RUNNING) {
-    debugRunner.pause();
-  }
-});
+  // Variables panel
+  varsToggle.addEventListener('click', () => {
+    varsBody.classList.toggle('open');
+    varsArrow.classList.toggle('open');
+  });
+  addVarBtn.addEventListener('click', () => {
+    const name = `var${Object.keys(flow.variables).length + 1}`;
+    flow.variables[name] = '';
+    renderVars();
+    const inputs = varsList.querySelectorAll('input[type="text"]');
+    if (inputs.length >= 2) inputs[inputs.length - 2].focus();
+  });
 
-dbgStop.addEventListener('click', () => {
-  stopDebugger();
-});
+  // Save
+  saveBtn.addEventListener('click', async () => {
+    readFlowFromUI();
+    if (workspaceId) {
+      await saveFlow(workspaceId, flow);
+      saveBtn.textContent = 'Saved!';
+      setTimeout(() => { saveBtn.textContent = 'Save'; }, 1500);
+    }
+  });
 
-// --- Back button ---
+  // Test / debugger buttons
+  testBtn.addEventListener('click', () => debugRun(false));
+  dbgRun.addEventListener('click', () => {
+    if (debugRunner && debugRunner.state === RunState.PAUSED) {
+      debugRunner.stepMode = false;
+      debugRunner.resume();
+    } else {
+      debugRun(false);
+    }
+  });
+  dbgStep.addEventListener('click', () => {
+    if (debugRunner && debugRunner.state === RunState.PAUSED) {
+      debugRunner.step();
+    } else {
+      debugRun(true);
+    }
+  });
+  dbgPause.addEventListener('click', () => {
+    if (debugRunner && debugRunner.state === RunState.RUNNING) {
+      debugRunner.pause();
+    }
+  });
+  dbgStop.addEventListener('click', () => {
+    stopDebugger();
+  });
 
-backBtn.addEventListener('click', () => {
-  location.href = 'sidepanel.html';
-});
+  // Panel tab switching
+  document.querySelectorAll('#view-flow .panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('#view-flow .panel-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('#view-flow .panel-content').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelector(`#view-flow .panel-content[data-panel="${tab.dataset.panel}"]`).classList.add('active');
+    });
+  });
+  panelsClose.addEventListener('click', () => {
+    bottomPanels.classList.remove('active');
+  });
 
-// --- Keyboard shortcuts ---
-document.addEventListener('keydown', (e) => {
-  // Ctrl+S to save
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault();
-    saveBtn.click();
-    return;
-  }
-  // F5 = Run
-  if (e.key === 'F5' && !e.shiftKey) {
-    e.preventDefault();
-    dbgRun.click();
-    return;
-  }
-  // Shift+F5 = Stop
-  if (e.key === 'F5' && e.shiftKey) {
-    e.preventDefault();
-    dbgStop.click();
-    return;
-  }
-  // F10 = Step
-  if (e.key === 'F10') {
-    e.preventDefault();
-    dbgStep.click();
-    return;
-  }
-  // F6 = Pause
-  if (e.key === 'F6') {
-    e.preventDefault();
-    dbgPause.click();
-    return;
-  }
-  // Escape in picker
-  if (e.key === 'Escape') {
-    if (pickerOverlay.classList.contains('open')) closePicker();
-  }
-});
+  // Back button
+  backBtn.addEventListener('click', () => {
+    if (_onBack) _onBack();
+  });
 
-// --- Go ---
-init();
+  // Keyboard shortcuts (only active when flow editor is shown)
+  document.addEventListener('keydown', (e) => {
+    if (!_mounted) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveBtn.click();
+      return;
+    }
+    if (e.key === 'F5' && !e.shiftKey) {
+      e.preventDefault();
+      dbgRun.click();
+      return;
+    }
+    if (e.key === 'F5' && e.shiftKey) {
+      e.preventDefault();
+      dbgStop.click();
+      return;
+    }
+    if (e.key === 'F10') {
+      e.preventDefault();
+      dbgStep.click();
+      return;
+    }
+    if (e.key === 'F6') {
+      e.preventDefault();
+      dbgPause.click();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (pickerOverlay.classList.contains('open')) closePicker();
+    }
+  });
+}
