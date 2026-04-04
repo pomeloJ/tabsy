@@ -1,24 +1,25 @@
 import { api } from '../api.js';
+import { t } from '../i18n.js';
 
 export function render(container) {
   container.innerHTML = `
     <div class="auth-container">
       <div class="auth-card">
-        <h2>Login</h2>
+        <h2>${t('login')}</h2>
         <div class="error-message" id="login-error"></div>
         <form id="login-form">
           <div class="form-group">
-            <label for="username">Username</label>
+            <label for="username">${t('username')}</label>
             <input type="text" id="username" autocomplete="username" required>
           </div>
           <div class="form-group">
-            <label for="password">Password</label>
+            <label for="password">${t('password')}</label>
             <input type="password" id="password" autocomplete="current-password" required>
           </div>
-          <button type="submit" class="btn btn-primary">Login</button>
+          <button type="submit" class="btn btn-primary btn-full">${t('login')}</button>
         </form>
         <div class="auth-footer">
-          Don't have an account? <a href="#/register">Register</a>
+          ${t('noAccount')} <a href="#/register">${t('register')}</a>
         </div>
       </div>
     </div>
@@ -43,7 +44,7 @@ export function render(container) {
       window.dispatchEvent(new CustomEvent('auth-changed'));
       location.hash = '#/';
     } else {
-      errorEl.textContent = data?.error || 'Login failed';
+      errorEl.textContent = data?.error || t('loginFailed');
       errorEl.classList.add('visible');
     }
   });

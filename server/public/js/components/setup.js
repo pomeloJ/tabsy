@@ -5,9 +5,10 @@ export function render(container) {
   container.innerHTML = `
     <div class="auth-container">
       <div class="auth-card">
-        <h2>${t('register')}</h2>
-        <div class="error-message" id="register-error"></div>
-        <form id="register-form">
+        <h2>${t('setupTitle')}</h2>
+        <p style="text-align:center;color:var(--color-text-secondary);margin-bottom:24px">${t('setupDesc')}</p>
+        <div class="error-message" id="setup-error"></div>
+        <form id="setup-form">
           <div class="form-group">
             <label for="username">${t('username')}</label>
             <input type="text" id="username" autocomplete="username" required minlength="3">
@@ -16,17 +17,14 @@ export function render(container) {
             <label for="password">${t('password')}</label>
             <input type="password" id="password" autocomplete="new-password" required minlength="6">
           </div>
-          <button type="submit" class="btn btn-primary btn-full">${t('register')}</button>
+          <button type="submit" class="btn btn-primary btn-full">${t('setupButton')}</button>
         </form>
-        <div class="auth-footer">
-          ${t('alreadyHaveAccount')} <a href="#/login">${t('login')}</a>
-        </div>
       </div>
     </div>
   `;
 
-  const form = container.querySelector('#register-form');
-  const errorEl = container.querySelector('#register-error');
+  const form = container.querySelector('#setup-form');
+  const errorEl = container.querySelector('#setup-error');
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -41,7 +39,7 @@ export function render(container) {
 
     if (!reg.ok) {
       btn.disabled = false;
-      errorEl.textContent = reg.data?.error || t('registrationFailed');
+      errorEl.textContent = reg.data?.error || t('setupFailed');
       errorEl.classList.add('visible');
       return;
     }
@@ -54,7 +52,6 @@ export function render(container) {
       window.dispatchEvent(new CustomEvent('auth-changed'));
       location.hash = '#/';
     } else {
-      // Registered but login failed — redirect to login page
       location.hash = '#/login';
     }
   });

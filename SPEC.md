@@ -419,7 +419,7 @@ Side Panel 卡片上顯示同步狀態圖示。
 - 在新視窗還原所有分頁與群組結構
 - 還原群組的標題、顏色、摺疊狀態
 - 分頁列最前方自動建立 marker group（摺疊狀態），顯示工作區名稱與顏色
-- marker 使用 `about:blank#ws-marker` 作為識別 URL
+- marker 使用 `chrome-extension://<id>/marker.html?name=...&color=...&tabs=...&savedAt=...` 作為識別 URL，頁面會顯示 workspace 資訊
 
 #### 工作區辨識
 
@@ -474,7 +474,7 @@ Side Panel 卡片上顯示同步狀態圖示。
 ### Marker 機制
 
 - 還原時在分頁列最前方建立一個摺疊的 tab group
-- 內含一個 `about:blank#ws-marker` 分頁
+- 內含一個 `marker.html` 分頁（顯示 workspace 名稱、顏色、分頁數、儲存時間）
 - 群組標題為 `📂 工作區名稱`，顏色對應工作區顏色
 - 儲存時偵測 marker URL，自動排除該分頁及其所屬群組
 

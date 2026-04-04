@@ -3,10 +3,11 @@
   "name": "Tabsy",
   "version": "1.0.0",
   "description": "Browser workspace management — save, restore, and sync tab workspaces",
-  "permissions": ["tabs", "tabGroups", "storage", "sidePanel"],
-  "host_permissions": ["http://*/api/*", "https://*/api/*"],
+  "permissions": ["tabs", "tabGroups", "storage", "sidePanel", "alarms", "scripting"],
+  "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "side_panel": {
     "default_path": "sidepanel.html"

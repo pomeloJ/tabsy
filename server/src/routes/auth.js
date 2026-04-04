@@ -3,15 +3,23 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Prepared statements — users
 const findUser = db.prepare('SELECT * FROM users WHERE username = ?');
-const findUserById = db.prepare('SELECT id, username, created_at FROM users WHERE id = ?');
+const findUserById = db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?');
 const insertUser = db.prepare(
-  'INSERT INTO users (username, password_hash) VALUES (?, ?)'
+  'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)'
 );
+const countUsers = db.prepare('SELECT COUNT(*) AS cnt FROM users');
+
+// GET /api/auth/setup-status
+router.get('/setup-status', (req, res) => {
+  const { cnt } = countUsers.get();
+  res.json({ needsSetup: cnt === 0 });
+});
 
 // Prepared statements — tokens
 const listTokens = db.prepare(
@@ -26,7 +34,13 @@ const findTokenById = db.prepare(
 const deleteToken = db.prepare('DELETE FROM sync_tokens WHERE id = ?');
 
 // POST /api/auth/register
+// Only allowed during initial setup (no users exist yet)
 router.post('/register', async (req, res) => {
+  const { cnt } = countUsers.get();
+  if (cnt > 0) {
+    return res.status(403).json({ error: 'Registration is disabled. An admin account already exists.' });
+  }
+
   const { username, password } = req.body;
 
   if (!username || typeof username !== 'string' || username.trim().length < 3) {
@@ -38,18 +52,14 @@ router.post('/register', async (req, res) => {
 
   const trimmed = username.trim();
 
-  // Check duplicate
-  if (findUser.get(trimmed)) {
-    return res.status(409).json({ error: 'Username already exists' });
-  }
-
   try {
     const hash = await bcrypt.hash(password, 10);
-    const result = insertUser.run(trimmed, hash);
+    const result = insertUser.run(trimmed, hash, 'admin');
     const user = findUserById.get(result.lastInsertRowid);
     res.status(201).json({
       id: user.id,
       username: user.username,
+      role: user.role,
       createdAt: user.created_at
     });
   } catch (err) {
@@ -79,6 +89,7 @@ router.post('/login', async (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
+    role: user.role,
     createdAt: user.created_at
   });
 });
@@ -102,6 +113,7 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
+    role: user.role,
     createdAt: user.created_at
   });
 });
@@ -145,6 +157,98 @@ router.delete('/tokens/:id', requireAuth, (req, res) => {
   }
   deleteToken.run(req.params.id);
   res.json({ message: 'Token revoked' });
+});
+
+// === Admin: User Management ===
+const listUsers = db.prepare(
+  'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC'
+);
+const deleteUser = db.prepare('DELETE FROM users WHERE id = ?');
+const updateUserPassword = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+
+// GET /api/auth/users — list all users (admin only)
+router.get('/users', requireAuth, requireAdmin, (req, res) => {
+  const users = listUsers.all();
+  res.json({
+    users: users.map(u => ({
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      createdAt: u.created_at
+    }))
+  });
+});
+
+// POST /api/auth/users — create a new user (admin only)
+router.post('/users', requireAuth, requireAdmin, async (req, res) => {
+  const { username, password, role } = req.body;
+
+  if (!username || typeof username !== 'string' || username.trim().length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  if (!password || typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  const userRole = (role === 'admin') ? 'admin' : 'user';
+  const trimmed = username.trim();
+
+  if (findUser.get(trimmed)) {
+    return res.status(409).json({ error: 'Username already exists' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const result = insertUser.run(trimmed, hash, userRole);
+    const user = findUserById.get(result.lastInsertRowid);
+    res.status(201).json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      createdAt: user.created_at
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// DELETE /api/auth/users/:id — delete a user (admin only, cannot delete self)
+router.delete('/users/:id', requireAuth, requireAdmin, (req, res) => {
+  const targetId = Number(req.params.id);
+  if (targetId === req.userId) {
+    return res.status(400).json({ error: 'Cannot delete your own account' });
+  }
+
+  const user = findUserById.get(targetId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  deleteUser.run(targetId);
+  res.json({ message: 'User deleted' });
+});
+
+// PUT /api/auth/users/:id/password — reset user password (admin only)
+router.put('/users/:id/password', requireAuth, requireAdmin, async (req, res) => {
+  const targetId = Number(req.params.id);
+  const { password } = req.body;
+
+  if (!password || typeof password !== 'string' || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  const user = findUserById.get(targetId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    updateUserPassword.run(hash, targetId);
+    res.json({ message: 'Password updated' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update password' });
+  }
 });
 
 module.exports = router;

@@ -4,14 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tabsy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <nav class="nav">
-    <a href="#/" class="nav-brand">Tabsy</a>
-    <div class="nav-right" id="nav-right"></div>
+  <!-- Sidebar (desktop) -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <a href="#/" class="sidebar-brand">Tabsy</a>
+      <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <div class="sidebar-footer" id="sidebar-footer"></div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- Top bar (mobile/tablet) -->
+  <header class="topbar" id="topbar">
+    <button class="topbar-menu" id="topbar-menu" aria-label="Open menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span class="topbar-title" id="topbar-title">Tabsy</span>
+    <div class="topbar-right" id="topbar-right"></div>
+  </header>
+
+  <!-- Main content -->
+  <main class="main" id="app"></main>
+
+  <!-- Bottom nav (mobile) -->
+  <nav class="bottomnav" id="bottomnav">
+    <a href="#/" class="bottomnav-item" data-route="/">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span data-i18n="workspaces">Workspaces</span>
+    </a>
+    <a href="#/settings" class="bottomnav-item" data-route="/settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <span data-i18n="settings">Settings</span>
+    </a>
   </nav>
-  <div id="app"></div>
+
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

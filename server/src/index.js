@@ -15,6 +15,10 @@ app.use('/api', (req, res, next) => {
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
+  // Chrome Private Network Access: required for extensions accessing local/LAN servers
+  if (req.headers['access-control-request-private-network']) {
+    res.header('Access-Control-Allow-Private-Network', 'true');
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });

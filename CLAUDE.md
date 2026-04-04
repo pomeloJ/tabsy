@@ -98,7 +98,7 @@ The auth middleware checks token first, then falls back to session. Sync tokens 
 Hash-based routing (`#/login`, `#/workspace/:id`) — no server-side routing needed. ES Modules loaded directly by the browser, no build tools.
 
 ### Extension marker mechanism
-Restored workspaces get a collapsed tab group with an `about:blank#ws-marker` tab at the front. This marker is auto-excluded when saving. Any code touching save/restore must preserve this behavior.
+Restored workspaces get a collapsed tab group with a `marker.html` tab at the front. The marker URL is `chrome-extension://<id>/marker.html?name=...&color=...&tabs=...&savedAt=...` and displays workspace info. Detection uses `url.startsWith(chrome.runtime.getURL('marker.html'))`. This marker is auto-excluded when saving. Any code touching save/restore must preserve this behavior.
 
 ### Database tables
 `users`, `sync_tokens`, `workspaces`, `deleted_workspaces`, plus session store (auto-managed by express-session)

@@ -9,16 +9,16 @@ router.use('/workspaces', requireAuth);
 
 // Prepared statements
 const listWorkspaces = db.prepare(
-  'SELECT id, name, color, saved_at, updated_at, groups, tabs FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
+  'SELECT id, name, color, saved_at, updated_at, groups, tabs, flows FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
 );
 const getWorkspace = db.prepare(
   'SELECT * FROM workspaces WHERE id = ? AND user_id = ?'
 );
 const insertWorkspace = db.prepare(
-  'INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
 );
 const updateWorkspace = db.prepare(
-  'UPDATE workspaces SET name = ?, color = ?, saved_at = ?, groups = ?, tabs = ?, updated_at = datetime(\'now\') WHERE id = ? AND user_id = ?'
+  'UPDATE workspaces SET name = ?, color = ?, saved_at = ?, groups = ?, tabs = ?, flows = ?, updated_at = datetime(\'now\') WHERE id = ? AND user_id = ?'
 );
 const deleteWorkspace = db.prepare(
   'DELETE FROM workspaces WHERE id = ? AND user_id = ?'
@@ -35,31 +35,38 @@ const getDeletedSince = db.prepare(
   'SELECT id FROM deleted_workspaces WHERE user_id = ? AND deleted_at > ?'
 );
 const upsertWorkspace = db.prepare(`
-  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
   ON CONFLICT(id) DO UPDATE SET
     name = excluded.name,
     color = excluded.color,
     saved_at = excluded.saved_at,
     groups = excluded.groups,
     tabs = excluded.tabs,
+    flows = excluded.flows,
     updated_at = datetime('now')
-  WHERE excluded.saved_at > workspaces.saved_at
+  WHERE excluded.saved_at >= workspaces.saved_at
 `);
 
 // GET /api/workspaces
 router.get('/workspaces', (req, res) => {
   const rows = listWorkspaces.all(req.userId);
   res.json({
-    workspaces: rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      color: r.color,
-      savedAt: r.saved_at,
-      updatedAt: r.updated_at,
-      tabCount: JSON.parse(r.tabs).length,
-      groupCount: JSON.parse(r.groups).length
-    }))
+    workspaces: rows.map(r => {
+      const groups = JSON.parse(r.groups);
+      const flows = JSON.parse(r.flows || '[]');
+      return {
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        savedAt: r.saved_at,
+        updatedAt: r.updated_at,
+        tabCount: JSON.parse(r.tabs).length,
+        groupCount: groups.length,
+        flowCount: flows.length,
+        groupSummary: groups.slice(0, 4).map(g => ({ title: g.title, color: g.color }))
+      };
+    })
   });
 });
 
@@ -76,13 +83,14 @@ router.get('/workspaces/:id', (req, res) => {
     savedAt: row.saved_at,
     updatedAt: row.updated_at,
     groups: JSON.parse(row.groups),
-    tabs: JSON.parse(row.tabs)
+    tabs: JSON.parse(row.tabs),
+    flows: JSON.parse(row.flows || '[]')
   });
 });
 
 // POST /api/workspaces
 router.post('/workspaces', (req, res) => {
-  const { id, name, color, savedAt, groups, tabs } = req.body;
+  const { id, name, color, savedAt, groups, tabs, flows } = req.body;
 
   if (!id || !name || !color || !savedAt) {
     return res.status(400).json({ error: 'id, name, color, and savedAt are required' });
@@ -92,12 +100,14 @@ router.post('/workspaces', (req, res) => {
     insertWorkspace.run(
       id, req.userId, name, color, savedAt,
       JSON.stringify(groups || []),
-      JSON.stringify(tabs || [])
+      JSON.stringify(tabs || []),
+      JSON.stringify(flows || [])
     );
     res.status(201).json({
       id, name, color, savedAt,
       groups: groups || [],
-      tabs: tabs || []
+      tabs: tabs || [],
+      flows: flows || []
     });
   } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
@@ -109,7 +119,7 @@ router.post('/workspaces', (req, res) => {
 
 // PUT /api/workspaces/:id
 router.put('/workspaces/:id', (req, res) => {
-  const { name, color, savedAt, groups, tabs } = req.body;
+  const { name, color, savedAt, groups, tabs, flows } = req.body;
 
   if (!name || !color || !savedAt) {
     return res.status(400).json({ error: 'name, color, and savedAt are required' });
@@ -119,6 +129,7 @@ router.put('/workspaces/:id', (req, res) => {
     name, color, savedAt,
     JSON.stringify(groups || []),
     JSON.stringify(tabs || []),
+    JSON.stringify(flows || []),
     req.params.id, req.userId
   );
 
@@ -134,7 +145,8 @@ router.put('/workspaces/:id', (req, res) => {
     savedAt: row.saved_at,
     updatedAt: row.updated_at,
     groups: JSON.parse(row.groups),
-    tabs: JSON.parse(row.tabs)
+    tabs: JSON.parse(row.tabs),
+    flows: JSON.parse(row.flows || '[]')
   });
 });
 
@@ -163,7 +175,8 @@ router.post('/sync/pull', (req, res) => {
     color: r.color,
     savedAt: r.saved_at,
     groups: JSON.parse(r.groups),
-    tabs: JSON.parse(r.tabs)
+    tabs: JSON.parse(r.tabs),
+    flows: JSON.parse(r.flows || '[]')
   }));
 
   const deletedRows = getDeletedSince.all(req.userId, since);
@@ -197,7 +210,8 @@ router.post('/sync/push', (req, res) => {
             color: existing.color,
             savedAt: existing.saved_at,
             groups: JSON.parse(existing.groups),
-            tabs: JSON.parse(existing.tabs)
+            tabs: JSON.parse(existing.tabs),
+            flows: JSON.parse(existing.flows || '[]')
           },
           resolution: 'server_wins'
         });
@@ -207,7 +221,8 @@ router.post('/sync/push', (req, res) => {
       upsertWorkspace.run(
         ws.id, req.userId, ws.name, ws.color, ws.savedAt,
         JSON.stringify(ws.groups || []),
-        JSON.stringify(ws.tabs || [])
+        JSON.stringify(ws.tabs || []),
+        JSON.stringify(ws.flows || [])
       );
     }
 
