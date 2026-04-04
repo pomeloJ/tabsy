@@ -106,4 +106,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sync_logs_client ON sync_logs(client_id);
 `);
 
+// Migration: backups table (per-user)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'manual',
+    filename TEXT NOT NULL,
+    size INTEGER DEFAULT 0,
+    workspace_count INTEGER DEFAULT 0,
+    note TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_backups_user ON backups(user_id);
+`);
+
+// Migration: add user_id to backups if missing (upgrade from global to per-user)
+const backupCols = db.prepare("PRAGMA table_info(backups)").all();
+if (!backupCols.find(c => c.name === 'user_id')) {
+  db.exec("ALTER TABLE backups ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_backups_user ON backups(user_id)");
+}
+
+// Migration: backup_settings table (per-user)
+// Check if old global backup_settings exists (key TEXT PRIMARY KEY without user_id)
+const bsColumns = db.prepare("PRAGMA table_info(backup_settings)").all();
+if (bsColumns.length > 0 && !bsColumns.find(c => c.name === 'user_id')) {
+  // Old schema — drop and recreate with per-user schema
+  db.exec("DROP TABLE backup_settings");
+}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS backup_settings (
+    user_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (user_id, key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+`);
+
 module.exports = db;

@@ -310,6 +310,14 @@
       gap: 8px;
     }
     .sync-bar .btn { flex: none; }
+    .clock-offset {
+      font-size: 9px;
+      color: var(--text-sec);
+      opacity: 0.5;
+      margin-left: auto;
+      cursor: default;
+      font-variant-numeric: tabular-nums;
+    }
     .sync-status {
       font-size: 11px;
       color: var(--text-sec);
@@ -1235,6 +1243,7 @@
         <input type="checkbox" id="auto-sync-checkbox" checked>
         <span data-i18n="auto">Auto</span>
       </label>
+      <span class="clock-offset" id="clock-offset" title=""></span>
     </div>
 
     <!-- Conflict banner -->

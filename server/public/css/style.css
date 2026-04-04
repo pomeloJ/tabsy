@@ -1709,3 +1709,50 @@ body.guest .main {
   font-size: 0.875rem;
   line-height: 1.7;
 }
+
+/* === Backup === */
+
+.backup-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.backup-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.backup-toggle-status {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.backup-settings-row {
+  padding: 10px 0;
+}
+
+.backup-decrypt-box {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.backup-import-preview {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.import-ws-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.import-ws-item:last-child {
+  border-bottom: none;
+}

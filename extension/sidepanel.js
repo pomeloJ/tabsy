@@ -9,6 +9,7 @@ import {
   formatDateTimeShort
 } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
+import { serverNow, getClockOffset } from './lib/api-client.js';
 import { captureWindow } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
@@ -581,7 +582,7 @@ async function resolveConflict(workspaceId, action) {
     case 'local':
       ws.tabs = cd.localVersion.tabs;
       ws.groups = cd.localVersion.groups;
-      ws.savedAt = new Date().toISOString();
+      ws.savedAt = serverNow();
       ws.syncStatus = 'pending';
       delete ws.conflictData;
       break;
@@ -597,7 +598,7 @@ async function resolveConflict(workspaceId, action) {
       const result = threeWayMerge(base, cd.localVersion, cd.remoteVersion);
       ws.tabs = result.merged.tabs;
       ws.groups = result.merged.groups;
-      ws.savedAt = new Date().toISOString();
+      ws.savedAt = serverNow();
       ws.syncStatus = 'pending';
       ws.syncedSnapshot = { tabs: result.merged.tabs, groups: result.merged.groups };
       delete ws.conflictData;
@@ -756,6 +757,25 @@ function triggerAutoSync() {
 const syncBar = document.getElementById('sync-bar');
 const syncBtn = document.getElementById('sync-btn');
 const syncStatus = document.getElementById('sync-status');
+const clockOffsetEl = document.getElementById('clock-offset');
+
+function updateClockOffsetDisplay() {
+  const { offset, calibrated } = getClockOffset();
+  if (!calibrated) {
+    clockOffsetEl.textContent = '';
+    clockOffsetEl.title = '';
+    return;
+  }
+  const sec = (offset / 1000).toFixed(1);
+  const sign = offset >= 0 ? '+' : '';
+  clockOffsetEl.textContent = `${sign}${sec}s`;
+  clockOffsetEl.title = `Clock offset: client ${offset >= 0 ? 'behind' : 'ahead of'} server by ${Math.abs(sec)}s`;
+  // Color hint: green if <1s, yellow if 1-5s, red if >5s
+  const abs = Math.abs(offset);
+  if (abs < 1000) clockOffsetEl.style.color = '';
+  else if (abs < 5000) clockOffsetEl.style.color = 'var(--ws-orange, #ca5010)';
+  else clockOffsetEl.style.color = 'var(--ws-red, #d13438)';
+}
 
 async function updateSyncBar() {
   const configured = await isSyncConfigured();
@@ -783,6 +803,7 @@ async function doSync() {
     renderConflictBanner();
   }
 
+  updateClockOffsetDisplay();
   syncBtn.disabled = false;
 }
 

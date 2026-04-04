@@ -36,8 +36,8 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Body parsing (limit payload size to prevent DoS)
-app.use(express.json({ limit: '1mb' }));
+// Body parsing (limit payload size to prevent DoS; 10mb for backup imports)
+app.use(express.json({ limit: '10mb' }));
 
 // Session middleware (SQLite-backed store)
 app.use(
@@ -71,7 +71,12 @@ app.get('/api/health', (req, res) => {
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/extension', require('./routes/extension'));
+app.use('/api/backups', require('./routes/backup'));
 app.use('/api', require('./routes/api'));
+
+// Start backup scheduler
+const backupService = require('./services/backup');
+backupService.startScheduler();
 
 app.listen(PORT, () => {
   console.log(`Tabsy server listening on http://localhost:${PORT}`);

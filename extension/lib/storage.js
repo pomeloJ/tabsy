@@ -1,3 +1,10 @@
+// --- Server-aligned clock ---
+// Injected by api-client.js to avoid circular dependency.
+// Falls back to local clock if not yet calibrated.
+let _serverNowFn = () => new Date().toISOString();
+export function setServerNowFn(fn) { _serverNowFn = fn; }
+function serverNow() { return _serverNowFn(); }
+
 // 10-color system (shared with server/Web UI)
 export const COLORS = [
   { name: '藍', hex: '#0078d4', chrome: 'blue' },
@@ -188,7 +195,7 @@ export async function saveFlow(workspaceId, flow) {
   } else {
     ws.flows.push(flow);
   }
-  ws.savedAt = new Date().toISOString();
+  ws.savedAt = serverNow();
   if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
   await save(ws);
   return flow;
@@ -198,7 +205,7 @@ export async function removeFlow(workspaceId, flowId) {
   const ws = await getById(workspaceId);
   if (!ws || !ws.flows) return;
   ws.flows = ws.flows.filter(f => f.id !== flowId);
-  ws.savedAt = new Date().toISOString();
+  ws.savedAt = serverNow();
   if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
   await save(ws);
 }
