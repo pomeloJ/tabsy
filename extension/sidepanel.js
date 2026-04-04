@@ -39,6 +39,21 @@ const otherWsTitle = document.getElementById('other-ws-title');
 
 let selectedColor = COLORS[0].hex;
 let currentWorkspaceData = null; // { id, name, color } of detected workspace
+let _activeTabUrl = '';
+
+function matchUrlPattern(pattern, url) {
+  if (!pattern) return false;
+  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+  return regex.test(url);
+}
+
+async function refreshActiveTabUrl() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    _activeTabUrl = tab?.url || '';
+  } catch { _activeTabUrl = ''; }
+}
 
 // --- Color picker ---
 function initColorPicker() {
@@ -289,17 +304,20 @@ function renderCurrentWsFlows(ws) {
   </div>`;
 
   if (flows.length > 0) {
-    html += flows.map(f => `
+    html += flows.map(f => {
+      const urlMatched = f.enabled && f.trigger !== 'manual' && f.match && _activeTabUrl && matchUrlPattern(f.match, _activeTabUrl);
+      return `
       <div class="flow-item ${f.enabled ? '' : 'disabled'}">
         <span class="flow-item-name" data-edit-flow="${f.id}" data-ws="${ws.id}">${escapeHtml(f.name)}</span>
+        ${urlMatched ? '<span class="flow-match-badge" title="Matches current tab">&#9889; match</span>' : ''}
         <span class="flow-item-trigger ${f.trigger}">${triggerLabel(f.trigger)}</span>
         <span class="flow-item-actions">
           <button class="flow-item-btn run" data-run-flow="${f.id}" data-ws="${ws.id}" title="Run">&#9654;</button>
           <button class="flow-item-btn edit" data-edit-flow="${f.id}" data-ws="${ws.id}" title="Edit">&#9998;</button>
           <button class="flow-item-btn delete" data-del-flow="${f.id}" data-ws="${ws.id}" title="Delete">&times;</button>
         </span>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
 
   currentWsFlows.innerHTML = html;
@@ -855,12 +873,15 @@ function renderFlowChips(workspaceId, flows) {
   }
 
   // Compact summary: show flow names as chips, minimal actions
-  const chips = flows.map(f => `
-    <span class="flow-chip ${f.enabled ? '' : 'disabled'}">
+  const chips = flows.map(f => {
+    const urlMatched = f.enabled && f.trigger !== 'manual' && f.match && _activeTabUrl && matchUrlPattern(f.match, _activeTabUrl);
+    return `
+    <span class="flow-chip ${f.enabled ? '' : 'disabled'} ${urlMatched ? 'url-matched' : ''}">
+      ${urlMatched ? '<span class="flow-match-dot" title="Matches current tab">&#9889;</span>' : ''}
       <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="Edit">${escapeHtml(f.name)}</span>
       <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="Run">&#9654;</span>
-    </span>
-  `).join('');
+    </span>`;
+  }).join('');
 
   return `
     <div class="ws-flow-section">
@@ -925,7 +946,7 @@ async function addNewFlow(workspaceId) {
 initColorPicker();
 
 // Phase 1: detect current workspace first (renderList depends on it)
-detectCurrentWorkspace().then(() => renderList()).then(() => {
+Promise.all([detectCurrentWorkspace(), refreshActiveTabUrl()]).then(() => renderList()).then(() => {
   // Phase 2: non-critical UI + sync (deferred)
   renderConflictBanner();
   loadSettings();
@@ -940,5 +961,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.workspaces) {
     detectCurrentWorkspace().then(() => renderList());
     renderConflictBanner();
+  }
+});
+
+// Re-render flow match badges when active tab changes
+chrome.tabs.onActivated.addListener(async () => {
+  await refreshActiveTabUrl();
+  renderList();
+  if (currentWorkspaceData) {
+    const ws = await getById(currentWorkspaceData.id);
+    if (ws) renderCurrentWsFlows(ws);
+  }
+});
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo) => {
+  if (!changeInfo.url) return;
+  await refreshActiveTabUrl();
+  renderList();
+  if (currentWorkspaceData) {
+    const ws = await getById(currentWorkspaceData.id);
+    if (ws) renderCurrentWsFlows(ws);
   }
 });

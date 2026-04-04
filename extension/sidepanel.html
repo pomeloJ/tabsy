@@ -120,6 +120,20 @@
     .flow-item-btn.run { color: #107c10; }
     .flow-item-btn.run:hover { background: #e6f4e6; color: #0b5a0b; }
     .flow-item-btn.delete:hover { color: var(--danger); }
+    .flow-match-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #fff7ed;
+      color: #ea580c;
+      border: 1px solid #fed7aa;
+      white-space: nowrap;
+    }
+    .flow-chip.url-matched {
+      background: #fff7ed;
+      border: 1px solid #fdba74;
+    }
+    .flow-match-dot { font-size: 11px; color: #ea580c; }
 
     /* Other workspaces collapsible section */
     .other-ws-toggle {
@@ -601,15 +615,36 @@
       color: var(--text-sec);
     }
     .flow-settings select,
-    .flow-settings input[type="text"] {
+    .flow-settings input[type="text"],
+    .flow-settings textarea {
       padding: 5px 10px;
       border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 12px;
       background: var(--surface);
     }
+    .flow-settings textarea {
+      font-family: 'SF Mono', Menlo, Consolas, monospace;
+      resize: vertical;
+      min-height: 32px;
+      width: 100%;
+      line-height: 1.4;
+    }
     .flow-settings select:focus,
-    .flow-settings input:focus { outline: none; border-color: var(--primary); }
+    .flow-settings input:focus,
+    .flow-settings textarea:focus { outline: none; border-color: var(--primary); }
+    .match-hint {
+      font-size: 11px;
+      margin-top: 4px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .match-hint.matched { display: block; color: #16a34a; background: rgba(22,163,74,.08); }
+    .match-hint.unmatched { display: block; color: #dc2626; background: rgba(220,38,38,.08); }
 
     /* === Block canvas === */
     .canvas {
@@ -1237,14 +1272,15 @@
         </select>
       </div>
       <div>
-        <label>URL Match</label>
-        <input type="text" id="flow-match" placeholder="*://example.com/*" style="width: 140px;">
-      </div>
-      <div>
         <label style="display:flex;align-items:center;gap:4px;">
           <input type="checkbox" id="flow-enabled" checked>
           Enabled
         </label>
+      </div>
+      <div id="flow-match-row" style="width:100%;">
+        <label>URL Match</label>
+        <textarea id="flow-match" placeholder="*://example.com/*" rows="2"></textarea>
+        <div id="flow-match-hint" class="match-hint"></div>
       </div>
     </div>
 

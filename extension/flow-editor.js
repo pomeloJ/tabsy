@@ -61,7 +61,7 @@ async function init(wsId, fId) {
     flow = createFlow('New Flow');
   }
 
-  loadFlowToUI();
+  await loadFlowToUI();
   renderCanvas();
   renderVars();
 }
@@ -100,6 +100,7 @@ export async function mountFlowEditor(wsId, fId, onBack) {
   }
 
   _mounted = true;
+  startTabListeners();
   await init(wsId, fId);
 }
 
@@ -108,6 +109,7 @@ export async function mountFlowEditor(wsId, fId, onBack) {
  */
 export function unmountFlowEditor() {
   _mounted = false;
+  stopTabListeners();
   // Stop any running debugger
   if (debugRunner && (debugRunner.state === RunState.RUNNING || debugRunner.state === RunState.PAUSED)) {
     debugRunner.stop();
@@ -118,11 +120,66 @@ export function unmountFlowEditor() {
   if (bottomPanels) bottomPanels.classList.remove('active');
 }
 
-function loadFlowToUI() {
+function matchUrlPattern(pattern, url) {
+  if (!pattern) return false;
+  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+  return regex.test(url);
+}
+
+let _activeTabUrl = '';
+
+async function fetchActiveTabUrl() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    _activeTabUrl = tab?.url || '';
+  } catch { _activeTabUrl = ''; }
+}
+
+async function onTabChanged() {
+  if (!_mounted) return;
+  await fetchActiveTabUrl();
+  updateMatchHint();
+}
+
+function startTabListeners() {
+  chrome.tabs.onActivated.addListener(onTabChanged);
+  chrome.tabs.onUpdated.addListener(onTabChanged);
+}
+
+function stopTabListeners() {
+  chrome.tabs.onActivated.removeListener(onTabChanged);
+  chrome.tabs.onUpdated.removeListener(onTabChanged);
+}
+
+function updateMatchHint() {
+  const hint = document.getElementById('flow-match-hint');
+  if (!hint) return;
+  const pattern = flowMatch.value.trim();
+  if (!pattern || !_activeTabUrl) {
+    hint.className = 'match-hint';
+    return;
+  }
+  const matched = matchUrlPattern(pattern, _activeTabUrl);
+  hint.className = 'match-hint ' + (matched ? 'matched' : 'unmatched');
+  const icon = matched ? '\u2714' : '\u2718';
+  hint.textContent = `${icon} ${_activeTabUrl}`;
+  hint.title = _activeTabUrl;
+}
+
+function updateMatchRowVisibility() {
+  const row = document.getElementById('flow-match-row');
+  if (row) row.style.display = flowTrigger.value === 'manual' ? 'none' : '';
+}
+
+async function loadFlowToUI() {
   flowNameInput.value = flow.name;
   flowTrigger.value = flow.trigger;
   flowMatch.value = flow.match || '';
   flowEnabled.checked = flow.enabled;
+  updateMatchRowVisibility();
+  await fetchActiveTabUrl();
+  updateMatchHint();
 }
 
 function readFlowFromUI() {
@@ -1218,6 +1275,12 @@ function attachEvents() {
   logCountBadge = document.getElementById('log-count');
   tlCountBadge = document.getElementById('tl-count');
   panelsClose = document.getElementById('panels-close');
+
+  // Trigger change → toggle URL Match row
+  flowTrigger.addEventListener('change', updateMatchRowVisibility);
+
+  // URL Match → live validation against active tab
+  flowMatch.addEventListener('input', updateMatchHint);
 
   // Picker
   pickerSearch.addEventListener('input', () => renderPickerList(pickerSearch.value));
