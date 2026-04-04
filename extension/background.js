@@ -1,6 +1,7 @@
 import { getAll, getById, save, getConflicts, getAutoSync } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow, detectWorkspaceWindows, hasWorkspaceChanged } from './lib/capture.js';
+import { FlowRunner } from './lib/flow-runner.js';
 
 const MARKER_URL = 'about:blank#ws-marker';
 const SYNC_ALARM_NAME = 'tabsy-auto-sync';
@@ -117,6 +118,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
     await updateBadge(tab.windowId);
   }
+
+  // --- Flow auto-trigger ---
+  if (changeInfo.status === 'complete' && tab.url) {
+    await checkFlowTriggers(tabId, tab.url, 'page_load');
+  }
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
@@ -167,6 +173,45 @@ async function updateBadge(windowId) {
     });
   } catch (e) {
     // Window may have closed during async operations
+  }
+}
+
+// --- Flow auto-trigger ---
+
+/** Convert glob-style URL pattern (with * wildcards) to RegExp */
+function matchUrlPattern(pattern, url) {
+  if (!pattern) return false;
+  // Escape regex special chars except *, then replace * with .*
+  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+  return regex.test(url);
+}
+
+/** Check all flows for auto-triggers matching the given tab */
+async function checkFlowTriggers(tabId, url, triggerType) {
+  try {
+    const allWorkspaces = await getAll();
+    for (const ws of allWorkspaces) {
+      if (!ws.flows || ws.flows.length === 0) continue;
+      for (const flow of ws.flows) {
+        if (!flow.enabled) continue;
+        if (flow.trigger !== triggerType) continue;
+        if (!flow.match) continue;
+        if (!matchUrlPattern(flow.match, url)) continue;
+
+        console.log(`[Tabsy Flow] Auto-trigger "${flow.name}" on ${url}`);
+        try {
+          const runner = new FlowRunner(flow, tabId);
+          runner.onLog = (entry) => console.log(`[Flow ${flow.name}]`, entry.message);
+          runner.onError = (err) => console.error(`[Flow ${flow.name}] Error:`, err.message);
+          await runner.run();
+        } catch (e) {
+          console.error(`[Tabsy Flow] Failed to run "${flow.name}":`, e.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Tabsy Flow] Trigger check error:', e);
   }
 }
 

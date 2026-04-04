@@ -35,6 +35,7 @@
     .current-ws .ws-label {
       font-weight: 600;
       color: var(--text);
+      font-size: 14px;
     }
     .current-ws-actions {
       display: flex;
@@ -46,6 +47,99 @@
       color: var(--text-sec);
       margin-top: 4px;
     }
+
+    /* Current workspace flow list (expanded, prominent) */
+    .current-ws-flows {
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+    .current-ws-flows .flow-list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .current-ws-flows .flow-list-header span {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .flow-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      margin-bottom: 4px;
+      transition: background 0.1s;
+    }
+    .flow-item:hover { background: #eaeaea; }
+    .flow-item.disabled { opacity: 0.5; }
+    .flow-item-name {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .flow-item-trigger {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: #e5f0fa;
+      color: #0078d4;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .flow-item-trigger.manual { background: #f0f0f0; color: #666; }
+    .flow-item-trigger.page_load { background: #e6f4e6; color: #107c10; }
+    .flow-item-trigger.page_idle { background: #fff4e5; color: #ca5010; }
+    .flow-item-actions {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .flow-item-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 3px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #999;
+      line-height: 1;
+    }
+    .flow-item-btn:hover { background: #ddd; color: var(--text); }
+    .flow-item-btn.run { color: #107c10; }
+    .flow-item-btn.run:hover { background: #e6f4e6; color: #0b5a0b; }
+    .flow-item-btn.delete:hover { color: var(--danger); }
+
+    /* Other workspaces collapsible section */
+    .other-ws-toggle {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      background: var(--bg);
+    }
+    .other-ws-toggle:hover { background: #eaeaea; }
+    .other-ws-toggle .arrow { transition: transform 0.15s; }
+    .other-ws-toggle .arrow.open { transform: rotate(90deg); }
+    .other-ws-body.collapsed { display: none; }
 
     /* Save-new toggle (collapsible) */
     .save-new-toggle {
@@ -1039,6 +1133,7 @@
         <button class="btn btn-primary btn-sm" id="quick-save-btn">Save</button>
         <button class="btn btn-danger btn-sm" id="quick-delete-btn">Delete</button>
       </div>
+      <div class="current-ws-flows" id="current-ws-flows" style="display:none"></div>
     </div>
 
     <!-- Save as new workspace (collapsible when in a workspace) -->
@@ -1080,9 +1175,14 @@
       <div class="flow-log-body" id="flow-log-body"></div>
     </div>
 
-    <!-- Workspace list -->
-    <div class="list-header">Saved Workspaces</div>
-    <div id="ws-list"></div>
+    <!-- Other workspaces (collapsible) -->
+    <div class="other-ws-toggle" id="other-ws-toggle">
+      <span id="other-ws-title">Other Workspaces</span>
+      <span class="arrow open" id="other-ws-arrow">&#9654;</span>
+    </div>
+    <div class="other-ws-body" id="other-ws-body">
+      <div id="ws-list"></div>
+    </div>
 
     <!-- Settings -->
     <div class="settings-toggle" id="settings-toggle">

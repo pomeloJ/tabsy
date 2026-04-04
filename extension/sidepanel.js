@@ -9,7 +9,7 @@ import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
-import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES } from './lib/flow-schema.js';
+import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES, TRIGGER_TYPES } from './lib/flow-schema.js';
 import { mountFlowEditor, unmountFlowEditor } from './flow-editor.js';
 
 const MARKER_URL = 'about:blank#ws-marker';
@@ -31,6 +31,11 @@ const quickDeleteBtn = document.getElementById('quick-delete-btn');
 const saveNewToggle = document.getElementById('save-new-toggle');
 const saveNewArrow = document.getElementById('save-new-arrow');
 const saveSection = document.getElementById('save-section');
+const currentWsFlows = document.getElementById('current-ws-flows');
+const otherWsToggle = document.getElementById('other-ws-toggle');
+const otherWsArrow = document.getElementById('other-ws-arrow');
+const otherWsBody = document.getElementById('other-ws-body');
+const otherWsTitle = document.getElementById('other-ws-title');
 
 let selectedColor = COLORS[0].hex;
 let currentWorkspaceData = null; // { id, name, color } of detected workspace
@@ -195,6 +200,7 @@ async function detectCurrentWorkspace() {
       currentWsLabel.textContent = 'No workspace detected';
       currentWsMeta.style.display = 'none';
       currentWsActions.style.display = 'none';
+      currentWsFlows.style.display = 'none';
       // No workspace — show save section directly, hide toggle
       saveNewToggle.style.display = 'none';
       saveSection.classList.remove('collapsed');
@@ -218,10 +224,13 @@ async function detectCurrentWorkspace() {
       saveNewToggle.style.display = 'flex';
       saveSection.classList.add('collapsed');
       saveNewArrow.classList.remove('open');
+      // Render current workspace flows
+      renderCurrentWsFlows(ws);
     } else {
       currentWorkspaceData = null;
       currentWsMeta.style.display = 'none';
       currentWsActions.style.display = 'none';
+      currentWsFlows.style.display = 'none';
       saveNewToggle.style.display = 'none';
       saveSection.classList.remove('collapsed');
     }
@@ -230,6 +239,7 @@ async function detectCurrentWorkspace() {
     currentWsLabel.textContent = 'No workspace detected';
     currentWsMeta.style.display = 'none';
     currentWsActions.style.display = 'none';
+    currentWsFlows.style.display = 'none';
     saveNewToggle.style.display = 'none';
     saveSection.classList.remove('collapsed');
   }
@@ -267,6 +277,65 @@ async function quickDeleteCurrentWorkspace() {
   }
 }
 
+// --- Render current workspace flows (expanded, prominent) ---
+
+function renderCurrentWsFlows(ws) {
+  const flows = ws.flows || [];
+  const triggerLabel = (t) => TRIGGER_TYPES[t]?.label || t;
+
+  let html = `<div class="flow-list-header">
+    <span>Flows${flows.length ? ` (${flows.length})` : ''}</span>
+    <button class="btn btn-sm btn-secondary" data-add-flow="${ws.id}">+ New</button>
+  </div>`;
+
+  if (flows.length > 0) {
+    html += flows.map(f => `
+      <div class="flow-item ${f.enabled ? '' : 'disabled'}">
+        <span class="flow-item-name" data-edit-flow="${f.id}" data-ws="${ws.id}">${escapeHtml(f.name)}</span>
+        <span class="flow-item-trigger ${f.trigger}">${triggerLabel(f.trigger)}</span>
+        <span class="flow-item-actions">
+          <button class="flow-item-btn run" data-run-flow="${f.id}" data-ws="${ws.id}" title="Run">&#9654;</button>
+          <button class="flow-item-btn edit" data-edit-flow="${f.id}" data-ws="${ws.id}" title="Edit">&#9998;</button>
+          <button class="flow-item-btn delete" data-del-flow="${f.id}" data-ws="${ws.id}" title="Delete">&times;</button>
+        </span>
+      </div>
+    `).join('');
+  }
+
+  currentWsFlows.innerHTML = html;
+  currentWsFlows.style.display = 'block';
+}
+
+// Event delegation for current-ws flows area
+currentWsFlows.addEventListener('click', async (e) => {
+  const target = e.target.closest('[data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
+  if (!target) return;
+
+  if (target.dataset.editFlow) {
+    e.stopPropagation();
+    openFlowEditor(target.dataset.ws, target.dataset.editFlow);
+  } else if (target.dataset.runFlow) {
+    e.stopPropagation();
+    runFlowOnActiveTab(target.dataset.ws, target.dataset.runFlow);
+  } else if (target.dataset.delFlow) {
+    e.stopPropagation();
+    if (!confirm('Delete this flow?')) return;
+    await removeFlow(target.dataset.ws, target.dataset.delFlow);
+    await renderList();
+    await detectCurrentWorkspace();
+  } else if (target.dataset.addFlow) {
+    addNewFlow(target.dataset.addFlow);
+  }
+});
+
+// Double-click rename for current-ws flows
+currentWsFlows.addEventListener('dblclick', (e) => {
+  const el = e.target.closest('[data-edit-flow]');
+  if (!el) return;
+  e.stopPropagation();
+  startRenameFlow(el, el.dataset.ws, el.dataset.editFlow);
+});
+
 // --- Render workspace list (differential) ---
 
 // Cache of last-rendered card HTML keyed by workspace id
@@ -292,10 +361,22 @@ function buildCardHtml(w, wsFlows) {
 }
 
 async function renderList() {
-  const workspaces = await getAll();
+  const allWorkspaces = await getAll();
+
+  // Separate current workspace from others
+  const currentId = currentWorkspaceData?.id;
+  const workspaces = allWorkspaces.filter(w => w.id !== currentId);
+
+  // Update other-ws toggle title
+  const sectionLabel = currentId ? 'Other Workspaces' : 'Saved Workspaces';
+  otherWsTitle.textContent = workspaces.length > 0
+    ? `${sectionLabel} (${workspaces.length})`
+    : sectionLabel;
 
   if (workspaces.length === 0) {
-    wsList.innerHTML = '<div class="empty-state">No saved workspaces.</div>';
+    wsList.innerHTML = currentId
+      ? '<div class="empty-state">No other workspaces.</div>'
+      : '<div class="empty-state">No saved workspaces.</div>';
     _renderedCards.clear();
     _renderedOrder = [];
     return;
@@ -528,6 +609,12 @@ saveNewToggle.addEventListener('click', () => {
   saveNewArrow.classList.toggle('open');
 });
 
+// Collapsible other-workspaces section
+otherWsToggle.addEventListener('click', () => {
+  otherWsBody.classList.toggle('collapsed');
+  otherWsArrow.classList.toggle('open');
+});
+
 // --- Settings ---
 const settingsToggle = document.getElementById('settings-toggle');
 const settingsArrow = document.getElementById('settings-arrow');
@@ -755,7 +842,7 @@ async function runFlowOnActiveTab(workspaceId, flowId) {
   showFlowResult(result);
 }
 
-// Render flow chips for a workspace card
+// Render flow chips for a workspace card (compact for non-current workspaces)
 function renderFlowChips(workspaceId, flows) {
   if (!flows || flows.length === 0) {
     return `
@@ -767,11 +854,11 @@ function renderFlowChips(workspaceId, flows) {
       </div>`;
   }
 
+  // Compact summary: show flow names as chips, minimal actions
   const chips = flows.map(f => `
     <span class="flow-chip ${f.enabled ? '' : 'disabled'}">
       <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="Edit">${escapeHtml(f.name)}</span>
       <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="Run">&#9654;</span>
-      <span class="flow-delete" data-del-flow="${f.id}" data-ws="${workspaceId}" title="Delete">&times;</span>
     </span>
   `).join('');
 
@@ -837,11 +924,8 @@ async function addNewFlow(workspaceId) {
 // --- Init (progressive: show content fast, defer heavy work) ---
 initColorPicker();
 
-// Phase 1: render visible content quickly
-Promise.all([
-  detectCurrentWorkspace(),
-  renderList(),
-]).then(() => {
+// Phase 1: detect current workspace first (renderList depends on it)
+detectCurrentWorkspace().then(() => renderList()).then(() => {
   // Phase 2: non-critical UI + sync (deferred)
   renderConflictBanner();
   loadSettings();
@@ -854,8 +938,7 @@ Promise.all([
 // Re-render when background auto-sync updates workspaces
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.workspaces) {
-    renderList();
+    detectCurrentWorkspace().then(() => renderList());
     renderConflictBanner();
-    detectCurrentWorkspace();
   }
 });
