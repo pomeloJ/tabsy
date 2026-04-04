@@ -6,6 +6,7 @@ import { render as renderSetup } from './components/setup.js';
 import { render as renderDashboard } from './components/dashboard.js';
 import { render as renderSettings } from './components/settings.js';
 import { render as renderWorkspace } from './components/workspace.js';
+import { render as renderDownload } from './components/download.js';
 
 const appEl = document.getElementById('app');
 const sidebar = document.getElementById('sidebar');
@@ -48,6 +49,10 @@ function updateNav() {
       <a href="#/settings" class="sidebar-link" data-route="/settings">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         ${t('settings')}
+      </a>
+      <a href="#/download" class="sidebar-link" data-route="/download">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        ${t('download')}
       </a>
     `;
 
@@ -123,7 +128,8 @@ const guestRoutes = {
 
 const authRoutes = {
   '#/': renderDashboard,
-  '#/settings': (el) => renderSettings(el, currentUser)
+  '#/settings': (el) => renderSettings(el, currentUser),
+  '#/download': renderDownload
 };
 
 // Dynamic route patterns
@@ -201,6 +207,8 @@ function updateTopbarTitle(hash) {
     topbarTitle.textContent = t('workspace');
   } else if (hash === '#/settings') {
     topbarTitle.textContent = t('settings');
+  } else if (hash === '#/download') {
+    topbarTitle.textContent = t('download');
   } else {
     topbarTitle.textContent = 'Tabsy';
   }

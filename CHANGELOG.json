@@ -1,0 +1,26 @@
+[
+  {
+    "version": "1.0.0",
+    "date": "2026-04-04",
+    "changes": {
+      "en": [
+        "Initial release",
+        "Workspace save/restore with tab groups",
+        "Cross-device sync via Tabsy server",
+        "Flow automation engine",
+        "Web UI with dashboard, settings, and admin panel",
+        "i18n support (English, Traditional Chinese)",
+        "Role-based authentication with setup wizard"
+      ],
+      "zh-TW": [
+        "首次發佈",
+        "工作區儲存/還原，支援分頁群組",
+        "透過 Tabsy 伺服器跨裝置同步",
+        "Flow 自動化引擎",
+        "Web UI：儀表板、設定、管理面板",
+        "多語系支援（英文、繁體中文）",
+        "角色式驗證與設定精靈"
+      ]
+    }
+  }
+]
