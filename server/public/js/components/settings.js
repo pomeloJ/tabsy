@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { t, getLocale, setLocale, getAvailableLocales, getTimezone, setTimezone, getDetectedTimezone, getTimezoneList, formatDateTime } from '../i18n.js';
-import { encryptBackup, decryptBackup, isEncryptedBackup, downloadFile } from '../crypto.js';
+import { encryptBackup, decryptBackup, isEncryptedBackup, downloadFile, isCryptoAvailable } from '../crypto.js';
 
 export async function render(container, currentUser) {
   const locales = getAvailableLocales();
@@ -10,7 +10,15 @@ export async function render(container, currentUser) {
   container.innerHTML = `
     <div class="page-header">
       <h1>${t('settings')}</h1>
+      ${isAdmin ? `
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="personal">${t('personalSettings')}</button>
+        <button class="settings-tab" data-tab="admin">${t('adminSettings')}</button>
+      </div>
+      ` : ''}
     </div>
+
+    <div class="settings-tab-content" id="tab-personal">
 
     <section class="settings-section">
       <h2>${t('language')}</h2>
@@ -53,25 +61,6 @@ export async function render(container, currentUser) {
       <div id="sync-logs-list"></div>
     </section>
 
-    ${isAdmin ? `
-    <section class="settings-section">
-      <h2>${t('userManagement')}</h2>
-      <p class="settings-desc">${t('userManagementDesc')}</p>
-
-      <div class="token-create-form" id="add-user-form">
-        <input type="text" id="new-username" class="search-input" placeholder="${t('usernamePlaceholder')}" style="flex:1">
-        <input type="password" id="new-password" class="search-input" placeholder="${t('passwordPlaceholder')}" style="flex:1">
-        <select id="new-role" class="search-input" style="max-width:140px">
-          <option value="user">${t('roleUser')}</option>
-          <option value="admin">${t('roleAdmin')}</option>
-        </select>
-        <button class="btn btn-primary btn-inline" id="add-user-btn">${t('addUser')}</button>
-      </div>
-
-      <div id="user-list"></div>
-    </section>
-    ` : ''}
-
     <section class="settings-section">
       <h2>${t('backupRestore')}</h2>
 
@@ -102,14 +91,6 @@ export async function render(container, currentUser) {
       <h3 style="margin-top:16px;margin-bottom:8px;font-size:0.9rem;color:var(--color-text-secondary)">${t('backupHistory')}</h3>
       <div id="backup-list"></div>
     </section>
-
-    ${isAdmin ? `
-    <section class="settings-section">
-      <h2>${t('allUsersBackups')}</h2>
-      <p class="settings-desc">${t('allUsersBackupsDesc')}</p>
-      <div id="all-backup-list"></div>
-    </section>
-    ` : ''}
 
     <section class="settings-section">
       <h2>${t('exportBackup')}</h2>
@@ -142,7 +123,50 @@ export async function render(container, currentUser) {
 
       <div id="import-preview-area" style="display:none;margin-top:12px"></div>
     </section>
+
+    </div><!-- /#tab-personal -->
+
+    ${isAdmin ? `
+    <div class="settings-tab-content" id="tab-admin" style="display:none">
+
+    <section class="settings-section">
+      <h2>${t('userManagement')}</h2>
+      <p class="settings-desc">${t('userManagementDesc')}</p>
+
+      <div class="token-create-form" id="add-user-form">
+        <input type="text" id="new-username" class="search-input" placeholder="${t('usernamePlaceholder')}" style="flex:1">
+        <input type="password" id="new-password" class="search-input" placeholder="${t('passwordPlaceholder')}" style="flex:1">
+        <select id="new-role" class="search-input" style="max-width:140px">
+          <option value="user">${t('roleUser')}</option>
+          <option value="admin">${t('roleAdmin')}</option>
+        </select>
+        <button class="btn btn-primary btn-inline" id="add-user-btn">${t('addUser')}</button>
+      </div>
+
+      <div id="user-list"></div>
+    </section>
+
+    <section class="settings-section">
+      <h2>${t('allUsersBackups')}</h2>
+      <p class="settings-desc">${t('allUsersBackupsDesc')}</p>
+      <div id="all-backup-list"></div>
+    </section>
+
+    </div><!-- /#tab-admin -->
+    ` : ''}
   `;
+
+  // --- Tab switching ---
+  if (isAdmin) {
+    container.querySelectorAll('.settings-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        container.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        container.querySelectorAll('.settings-tab-content').forEach(c => c.style.display = 'none');
+        container.querySelector(`#tab-${tab.dataset.tab}`).style.display = '';
+      });
+    });
+  }
 
   // --- Language selector ---
   container.querySelector('#lang-select').addEventListener('change', (e) => {
@@ -258,7 +282,7 @@ export async function render(container, currentUser) {
   const syncLogsListEl = container.querySelector('#sync-logs-list');
 
   async function loadSyncLogs() {
-    const { ok, data } = await api.get('/sync/logs?limit=30');
+    const { ok, data } = await api.get('/sync/logs?limit=5');
     if (!ok) {
       syncLogsListEl.innerHTML = `<p class="empty-state">${t('failedToLoadSyncLogs')}</p>`;
       return;
@@ -531,6 +555,7 @@ async function initBackupSection(container) {
       const dateSuffix = new Date().toISOString().slice(0, 10);
 
       if (encryptCheck.checked) {
+        if (!isCryptoAvailable()) { alert(t('encryptionRequiresHttps')); return; }
         const pw = pw1Input.value;
         const pw2 = pw2Input.value;
         if (pw.length < 4) { alert(t('passwordTooShort')); return; }
@@ -566,6 +591,7 @@ async function initBackupSection(container) {
     const buffer = await file.arrayBuffer();
 
     if (isEncryptedBackup(buffer)) {
+      if (!isCryptoAvailable()) { alert(t('encryptionRequiresHttps')); return; }
       showDecryptThenImport(buffer, previewArea);
     } else {
       try {
@@ -785,6 +811,7 @@ function renderBackupTable(backups, containerEl, showUsername, onRefresh) {
 
         const wantEncrypt = confirm(t('encryptWithPassword') + '?');
         if (wantEncrypt) {
+          if (!isCryptoAvailable()) { alert(t('encryptionRequiresHttps')); btn.disabled = false; return; }
           const pw = prompt(t('encryptPassword'));
           if (!pw) { btn.disabled = false; return; }
           const pw2 = prompt(t('encryptPasswordConfirm'));

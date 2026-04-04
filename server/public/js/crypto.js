@@ -15,6 +15,13 @@ const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 const HEADER_LENGTH = 5 + 1 + SALT_LENGTH + IV_LENGTH; // 34 bytes
 
+/**
+ * Check if Web Crypto API is available (requires HTTPS or localhost).
+ */
+export function isCryptoAvailable() {
+  return !!(crypto && crypto.subtle);
+}
+
 async function deriveKey(password, salt) {
   const keyMaterial = await crypto.subtle.importKey(
     'raw',

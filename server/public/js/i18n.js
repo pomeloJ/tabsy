@@ -11,6 +11,8 @@ const locales = {
     // Nav & layout
     workspaces: 'Workspaces',
     settings: 'Settings',
+    personalSettings: 'Personal',
+    adminSettings: 'Administration',
     logout: 'Logout',
     workspace: 'Workspace',
     closeMenu: 'Close menu',
@@ -243,6 +245,7 @@ const locales = {
     passwordMismatch: 'Passwords do not match.',
     passwordTooShort: 'Password must be at least 4 characters.',
     passwordWarning: 'Password cannot be recovered. Keep it safe.',
+    encryptionRequiresHttps: 'Encryption requires a secure connection (HTTPS). Please access via HTTPS or localhost.',
     exporting: 'Exporting...',
     exportSuccess: 'Export complete.',
 
@@ -292,6 +295,8 @@ const locales = {
   'zh-TW': {
     workspaces: '工作區',
     settings: '設定',
+    personalSettings: '個人設定',
+    adminSettings: '管理區域',
     logout: '登出',
     workspace: '工作區',
     closeMenu: '關閉選單',
@@ -513,6 +518,7 @@ const locales = {
     passwordMismatch: '兩次密碼不一致。',
     passwordTooShort: '密碼至少需要 4 個字元。',
     passwordWarning: '密碼無法找回，請妥善保管。',
+    encryptionRequiresHttps: '加密功能需要安全連線（HTTPS）。請透過 HTTPS 或 localhost 存取。',
     exporting: '匯出中...',
     exportSuccess: '匯出完成。',
 

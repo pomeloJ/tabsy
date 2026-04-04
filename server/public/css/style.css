@@ -696,6 +696,35 @@ body.guest .main {
 }
 
 /* === Settings === */
+.settings-tabs {
+  display: flex;
+  gap: 0;
+  margin-top: 12px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.settings-tab {
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--color-text);
+}
+
+.settings-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
 .settings-section {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
