@@ -84,4 +84,26 @@ if (!userColumns.find(c => c.name === 'role')) {
   db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
 }
 
+// Migration: add last_synced_by column to workspaces
+const wsColumns2 = db.prepare("PRAGMA table_info(workspaces)").all();
+if (!wsColumns2.find(c => c.name === 'last_synced_by')) {
+  db.exec("ALTER TABLE workspaces ADD COLUMN last_synced_by TEXT DEFAULT NULL");
+}
+
+// Migration: sync_logs table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sync_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    client_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    workspace_count INTEGER NOT NULL DEFAULT 0,
+    details TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_sync_logs_user ON sync_logs(user_id);
+  CREATE INDEX IF NOT EXISTS idx_sync_logs_client ON sync_logs(client_id);
+`);
+
 module.exports = db;

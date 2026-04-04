@@ -125,6 +125,7 @@ function renderAll() {
       <button class="btn-icon" id="ws-edit-name" title="${t('editName')}" aria-label="${t('editWorkspaceName')}">${svgPencil}</button>
       <span class="ws-header-meta" id="ws-meta"></span>
     </div>
+    ${state.lastSyncedBy ? `<div class="ws-synced-by" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">${t('lastSyncedBy')}: <code style="font-size:11px;background:#f0f0f0;padding:2px 6px;border-radius:3px">${escapeHtml(state.lastSyncedBy.substring(0, 8))}…</code></div>` : ''}
 
     <div id="ws-groups"></div>
 

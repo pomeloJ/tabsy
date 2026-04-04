@@ -776,6 +776,24 @@ body.guest .main {
   border-bottom: none;
 }
 
+/* Sync action badges */
+.sync-action-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.sync-action-push {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.sync-action-pull {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
 /* === Workspace Detail === */
 .ws-detail {
   max-width: 720px;

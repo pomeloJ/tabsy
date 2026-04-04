@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { t, getLocale, setLocale, getAvailableLocales } from '../i18n.js';
+import { t, getLocale, setLocale, getAvailableLocales, getTimezone, setTimezone, getDetectedTimezone, getTimezoneList, formatDateTime } from '../i18n.js';
 
 export async function render(container, currentUser) {
   const locales = getAvailableLocales();
@@ -21,6 +21,14 @@ export async function render(container, currentUser) {
     </section>
 
     <section class="settings-section">
+      <h2>${t('timezone')}</h2>
+      <div class="token-create-form">
+        <select id="tz-select" class="search-input" style="max-width:320px">
+        </select>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h2>${t('syncTokens')}</h2>
       <p class="settings-desc">${t('syncTokensDesc')}</p>
 
@@ -36,6 +44,12 @@ export async function render(container, currentUser) {
       </div>
 
       <div id="token-list"></div>
+    </section>
+
+    <section class="settings-section">
+      <h2>${t('syncLogs')}</h2>
+      <p class="settings-desc">${t('syncLogsDesc')}</p>
+      <div id="sync-logs-list"></div>
     </section>
 
     ${isAdmin ? `
@@ -61,6 +75,22 @@ export async function render(container, currentUser) {
   // --- Language selector ---
   container.querySelector('#lang-select').addEventListener('change', (e) => {
     setLocale(e.target.value);
+    window.dispatchEvent(new CustomEvent('locale-changed'));
+  });
+
+  // --- Timezone selector ---
+  const tzSelectEl = container.querySelector('#tz-select');
+  const detected = getDetectedTimezone();
+  const currentTz = getTimezone();
+  const savedTz = localStorage.getItem('tabsyTimezone');
+  const zones = getTimezoneList();
+  const autoLabel = `Auto (${detected})`;
+  tzSelectEl.innerHTML = `<option value="">${autoLabel}</option>` +
+    zones.map(z => `<option value="${z}">${z}</option>`).join('');
+  tzSelectEl.value = savedTz || '';
+
+  tzSelectEl.addEventListener('change', (e) => {
+    setTimezone(e.target.value || '');
     window.dispatchEvent(new CustomEvent('locale-changed'));
   });
 
@@ -151,6 +181,50 @@ export async function render(container, currentUser) {
   });
 
   await loadTokens();
+
+  // === Sync Logs ===
+  const syncLogsListEl = container.querySelector('#sync-logs-list');
+
+  async function loadSyncLogs() {
+    const { ok, data } = await api.get('/sync/logs?limit=30');
+    if (!ok) {
+      syncLogsListEl.innerHTML = `<p class="empty-state">${t('failedToLoadSyncLogs')}</p>`;
+      return;
+    }
+    renderSyncLogs(data.logs);
+  }
+
+  function renderSyncLogs(logs) {
+    if (!logs || logs.length === 0) {
+      syncLogsListEl.innerHTML = `<p class="empty-state">${t('noSyncLogs')}</p>`;
+      return;
+    }
+
+    syncLogsListEl.innerHTML = `
+      <table class="token-table">
+        <thead>
+          <tr>
+            <th>${t('syncLogAction')}</th>
+            <th>${t('syncLogClientId')}</th>
+            <th>${t('syncLogWorkspaces')}</th>
+            <th>${t('syncLogTime')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${logs.map(log => `
+            <tr>
+              <td><span class="sync-action-badge sync-action-${log.action}">${log.action === 'push' ? t('syncLogPush') : t('syncLogPull')}</span></td>
+              <td><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;border-radius:3px" title="${escapeHtml(log.clientId)}">${escapeHtml(log.clientId.substring(0, 8))}…</code></td>
+              <td>${log.workspaceCount}</td>
+              <td>${formatTime(log.createdAt)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  await loadSyncLogs();
 
   // === Admin: User Management ===
   if (!isAdmin) return;
@@ -274,8 +348,5 @@ function escapeHtml(str) {
 }
 
 function formatTime(iso) {
-  const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTime(iso);
 }

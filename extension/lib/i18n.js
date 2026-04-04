@@ -190,8 +190,13 @@ const locales = {
     saved: 'Saved',
     opened: 'Opened',
     markerHint: 'This tab is a Tabsy workspace marker — do not close',
-    // Language
+    // Browser ID
+    browserId: 'Browser ID',
+    copy: 'Copy',
+    copied: 'Copied!',
+    // Language & Timezone
     language: 'Language',
+    timezone: 'Timezone',
   },
 
   'zh-TW': {
@@ -362,7 +367,13 @@ const locales = {
     saved: '儲存',
     opened: '開啟',
     markerHint: '此分頁為 Tabsy workspace 標記 — 請勿關閉',
+    // Browser ID
+    browserId: '瀏覽器 ID',
+    copy: '複製',
+    copied: '已複製！',
+    // Language & Timezone
     language: '語言',
+    timezone: '時區',
   }
 };
 

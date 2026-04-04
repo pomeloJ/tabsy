@@ -167,8 +167,22 @@ const locales = {
     noOtherUsers: 'No other users yet.',
     you: '(you)',
 
-    // Language
+    // Language & Timezone
     language: 'Language',
+    timezone: 'Timezone',
+
+    // Sync logs
+    syncLogs: 'Sync History',
+    syncLogsDesc: 'Recent sync activity from your browser extensions.',
+    syncLogAction: 'Action',
+    syncLogClientId: 'Browser ID',
+    syncLogWorkspaces: 'Workspaces',
+    syncLogTime: 'Time',
+    syncLogPull: 'Pull',
+    syncLogPush: 'Push',
+    noSyncLogs: 'No sync history yet.',
+    failedToLoadSyncLogs: 'Failed to load sync logs.',
+    lastSyncedBy: 'Last synced by',
 
     // Download page
     download: 'Download',
@@ -338,6 +352,20 @@ const locales = {
     you: '（你）',
 
     language: '語言',
+    timezone: '時區',
+
+    // Sync logs
+    syncLogs: '同步紀錄',
+    syncLogsDesc: '來自瀏覽器擴充功能的近期��步活動。',
+    syncLogAction: '動作',
+    syncLogClientId: '瀏覽器 ID',
+    syncLogWorkspaces: '工作區',
+    syncLogTime: '時間',
+    syncLogPull: '拉取',
+    syncLogPush: '推送',
+    noSyncLogs: '尚無同步紀錄。',
+    failedToLoadSyncLogs: '載入同���紀錄失敗。',
+    lastSyncedBy: '最後同步自',
 
     // Download page
     download: '下載',
@@ -398,5 +426,68 @@ export function getAvailableLocales() {
   ];
 }
 
+// --- Timezone ---
+
+const _detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let _timezone = _detectedTimezone;
+
+export function getTimezone() {
+  return _timezone;
+}
+
+export function setTimezone(tz) {
+  if (tz) {
+    _timezone = tz;
+    localStorage.setItem('tabsyTimezone', tz);
+  } else {
+    _timezone = _detectedTimezone;
+    localStorage.removeItem('tabsyTimezone');
+  }
+}
+
+export function getDetectedTimezone() {
+  return _detectedTimezone;
+}
+
+export function initTimezone() {
+  const saved = localStorage.getItem('tabsyTimezone');
+  _timezone = saved || _detectedTimezone;
+}
+
+export function getTimezoneList() {
+  try {
+    return Intl.supportedValuesOf('timeZone');
+  } catch {
+    return [_detectedTimezone];
+  }
+}
+
+/**
+ * Format an ISO date string using the current timezone setting.
+ */
+export function formatDateTime(iso, opts = {}) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: _timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+    ...opts
+  });
+}
+
+export function formatDateTimeShort(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: _timezone,
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
+
 // Initialize on load
 initLocale();
+initTimezone();

@@ -53,8 +53,14 @@ document.getElementById('name').textContent = wsName;
 document.documentElement.style.setProperty('--color', wsColor);
 document.title = '\u{1F4C2} ' + wsName + ' \u2014 Tabsy';
 
+var _markerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+chrome.storage.local.get('tabsyTimezone').then(function(r) {
+  if (r.tabsyTimezone) _markerTz = r.tabsyTimezone;
+});
+
 function formatTime(date) {
   return date.toLocaleString(undefined, {
+    timeZone: _markerTz,
     month: 'numeric', day: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit'
   });

@@ -8,6 +8,13 @@ const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+/** Ensure SQLite datetime strings are proper ISO 8601 with UTC indicator */
+function utc(dt) {
+  if (!dt) return dt;
+  if (/[Z+\-]\d{0,4}$/.test(dt)) return dt;
+  return dt.replace(' ', 'T') + 'Z';
+}
+
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -70,7 +77,7 @@ router.post('/register', authLimiter, async (req, res) => {
       id: user.id,
       username: user.username,
       role: user.role,
-      createdAt: user.created_at
+      createdAt: utc(user.created_at)
     });
   } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
@@ -99,7 +106,7 @@ router.post('/login', authLimiter, async (req, res) => {
     id: user.id,
     username: user.username,
     role: user.role,
-    createdAt: user.created_at
+    createdAt: utc(user.created_at)
   });
 });
 
@@ -123,7 +130,7 @@ router.get('/me', requireAuth, (req, res) => {
     id: user.id,
     username: user.username,
     role: user.role,
-    createdAt: user.created_at
+    createdAt: utc(user.created_at)
   });
 });
 
@@ -134,8 +141,8 @@ router.get('/tokens', requireAuth, (req, res) => {
     tokens: tokens.map(t => ({
       id: t.id,
       name: t.name,
-      createdAt: t.created_at,
-      lastUsedAt: t.last_used_at
+      createdAt: utc(t.created_at),
+      lastUsedAt: utc(t.last_used_at)
     }))
   });
 });
@@ -183,7 +190,7 @@ router.get('/users', requireAuth, requireAdmin, (req, res) => {
       id: u.id,
       username: u.username,
       role: u.role,
-      createdAt: u.created_at
+      createdAt: utc(u.created_at)
     }))
   });
 });
@@ -214,7 +221,7 @@ router.post('/users', requireAuth, requireAdmin, async (req, res) => {
       id: user.id,
       username: user.username,
       role: user.role,
-      createdAt: user.created_at
+      createdAt: utc(user.created_at)
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create user' });

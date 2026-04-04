@@ -4,9 +4,13 @@
 
 import { BLOCK_TYPES, BLOCK_CATEGORIES, CONDITION_TYPES, TRIGGER_TYPES,
          createFlow, createBlock, interpolate, hasDangerousBlocks, isDangerousBlock } from './lib/flow-schema.js';
-import { getFlows, saveFlow, getFlowById } from './lib/storage.js';
+import { getFlows, saveFlow, getFlowById, getTimezone } from './lib/storage.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { t, initLocale } from './lib/i18n.js';
+
+// --- Timezone ---
+let _editorTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+getTimezone().then(tz => { _editorTz = tz; });
 
 // --- State ---
 let flow = null;
@@ -1159,7 +1163,7 @@ function appendLogEntry(entry, type = 'info') {
 
   const div = document.createElement('div');
   div.className = 'log-entry';
-  const time = new Date(entry.time).toLocaleTimeString();
+  const time = new Date(entry.time).toLocaleTimeString(undefined, { timeZone: _editorTz });
   const icon = type === 'error' ? '&#10007;' : type === 'warn' ? '&#9888;' : '&#9679;';
   div.innerHTML = `
     <span class="log-time">${time}</span>

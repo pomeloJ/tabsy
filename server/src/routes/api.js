@@ -20,12 +20,21 @@ function safeJsonParse(str, fallback = []) {
   catch { return fallback; }
 }
 
+/** Ensure SQLite datetime strings are proper ISO 8601 with UTC indicator */
+function utc(dt) {
+  if (!dt) return dt;
+  // Already has timezone info (Z or +/-offset)
+  if (/[Z+\-]\d{0,4}$/.test(dt)) return dt;
+  // SQLite datetime('now') format: "2026-04-04 08:45:00" → append Z
+  return dt.replace(' ', 'T') + 'Z';
+}
+
 // All /api/workspaces routes require auth
 router.use('/workspaces', requireAuth);
 
 // Prepared statements
 const listWorkspaces = db.prepare(
-  'SELECT id, name, color, saved_at, updated_at, groups, tabs, flows FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
+  'SELECT id, name, color, saved_at, updated_at, last_synced_by, groups, tabs, flows FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
 );
 const getWorkspace = db.prepare(
   'SELECT * FROM workspaces WHERE id = ? AND user_id = ?'
@@ -51,8 +60,8 @@ const getDeletedSince = db.prepare(
   'SELECT id FROM deleted_workspaces WHERE user_id = ? AND deleted_at > ?'
 );
 const upsertWorkspace = db.prepare(`
-  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, updated_at, last_synced_by)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
   ON CONFLICT(id) DO UPDATE SET
     name = excluded.name,
     color = excluded.color,
@@ -60,9 +69,13 @@ const upsertWorkspace = db.prepare(`
     groups = excluded.groups,
     tabs = excluded.tabs,
     flows = excluded.flows,
-    updated_at = datetime('now')
+    updated_at = datetime('now'),
+    last_synced_by = excluded.last_synced_by
   WHERE excluded.saved_at >= workspaces.saved_at
 `);
+const insertSyncLog = db.prepare(
+  'INSERT INTO sync_logs (user_id, client_id, action, workspace_count, details) VALUES (?, ?, ?, ?, ?)'
+);
 
 // GET /api/workspaces
 router.get('/workspaces', (req, res) => {
@@ -75,8 +88,9 @@ router.get('/workspaces', (req, res) => {
         id: r.id,
         name: r.name,
         color: r.color,
-        savedAt: r.saved_at,
-        updatedAt: r.updated_at,
+        savedAt: utc(r.saved_at),
+        updatedAt: utc(r.updated_at),
+        lastSyncedBy: r.last_synced_by || null,
         tabCount: safeJsonParse(r.tabs).length,
         groupCount: groups.length,
         flowCount: flows.length,
@@ -96,8 +110,9 @@ router.get('/workspaces/:id', (req, res) => {
     id: row.id,
     name: row.name,
     color: row.color,
-    savedAt: row.saved_at,
-    updatedAt: row.updated_at,
+    savedAt: utc(row.saved_at),
+    updatedAt: utc(row.updated_at),
+    lastSyncedBy: row.last_synced_by || null,
     groups: safeJsonParse(row.groups),
     tabs: safeJsonParse(row.tabs),
     flows: safeJsonParse(row.flows || '[]')
@@ -161,8 +176,8 @@ router.put('/workspaces/:id', (req, res) => {
     id: row.id,
     name: row.name,
     color: row.color,
-    savedAt: row.saved_at,
-    updatedAt: row.updated_at,
+    savedAt: utc(row.saved_at),
+    updatedAt: utc(row.updated_at),
     groups: safeJsonParse(row.groups),
     tabs: safeJsonParse(row.tabs),
     flows: safeJsonParse(row.flows || '[]')
@@ -184,7 +199,7 @@ router.use('/sync', requireAuth);
 
 // POST /api/sync/pull
 router.post('/sync/pull', (req, res) => {
-  const { lastSyncAt } = req.body;
+  const { lastSyncAt, clientId } = req.body;
   const since = lastSyncAt || '1970-01-01T00:00:00.000Z';
 
   const rows = getWorkspacesSince.all(req.userId, since);
@@ -192,7 +207,8 @@ router.post('/sync/pull', (req, res) => {
     id: r.id,
     name: r.name,
     color: r.color,
-    savedAt: r.saved_at,
+    savedAt: utc(r.saved_at),
+    lastSyncedBy: r.last_synced_by || null,
     groups: safeJsonParse(r.groups),
     tabs: safeJsonParse(r.tabs),
     flows: safeJsonParse(r.flows || '[]')
@@ -200,6 +216,12 @@ router.post('/sync/pull', (req, res) => {
 
   const deletedRows = getDeletedSince.all(req.userId, since);
   const deleted = deletedRows.map(r => r.id);
+
+  // Log this pull event (only when there are actual changes)
+  if (clientId && (workspaces.length > 0 || deleted.length > 0)) {
+    const wsIds = [...workspaces.map(w => w.id), ...deleted];
+    insertSyncLog.run(req.userId, clientId, 'pull', workspaces.length + deleted.length, JSON.stringify(wsIds));
+  }
 
   res.json({
     workspaces,
@@ -210,7 +232,7 @@ router.post('/sync/pull', (req, res) => {
 
 // POST /api/sync/push
 router.post('/sync/push', (req, res) => {
-  const { upsert = [], delete: toDelete = [] } = req.body;
+  const { upsert = [], delete: toDelete = [], clientId } = req.body;
 
   if (!Array.isArray(upsert) || !Array.isArray(toDelete)) {
     return res.status(400).json({ error: 'upsert and delete must be arrays' });
@@ -239,7 +261,7 @@ router.post('/sync/push', (req, res) => {
             id: existing.id,
             name: existing.name,
             color: existing.color,
-            savedAt: existing.saved_at,
+            savedAt: utc(existing.saved_at),
             groups: safeJsonParse(existing.groups),
             tabs: safeJsonParse(existing.tabs),
             flows: safeJsonParse(existing.flows || '[]')
@@ -253,7 +275,8 @@ router.post('/sync/push', (req, res) => {
         ws.id, req.userId, ws.name, ws.color, ws.savedAt,
         JSON.stringify(ws.groups || []),
         JSON.stringify(ws.tabs || []),
-        JSON.stringify(ws.flows || [])
+        JSON.stringify(ws.flows || []),
+        clientId || null
       );
     }
 
@@ -267,9 +290,35 @@ router.post('/sync/push', (req, res) => {
 
   pushTransaction();
 
+  // Log this push event (only when there are actual changes)
+  if (clientId && (upsert.length > 0 || toDelete.length > 0)) {
+    const wsIds = [...upsert.filter(w => w.id).map(w => w.id), ...toDelete];
+    insertSyncLog.run(req.userId, clientId, 'push', upsert.length + toDelete.length, JSON.stringify(wsIds));
+  }
+
   res.json({
     conflicts,
     serverTime: new Date().toISOString()
+  });
+});
+
+// GET /api/sync/logs — retrieve sync history
+const getSyncLogs = db.prepare(
+  'SELECT id, client_id, action, workspace_count, details, created_at FROM sync_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+);
+
+router.get('/sync/logs', requireAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = getSyncLogs.all(req.userId, limit);
+  res.json({
+    logs: rows.map(r => ({
+      id: r.id,
+      clientId: r.client_id,
+      action: r.action,
+      workspaceCount: r.workspace_count,
+      workspaceIds: safeJsonParse(r.details),
+      createdAt: utc(r.created_at)
+    }))
   });
 });
 

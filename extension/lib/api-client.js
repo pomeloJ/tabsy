@@ -1,4 +1,4 @@
-import { getSettings } from './storage.js';
+import { getSettings, getClientId } from './storage.js';
 
 /**
  * Fetch wrapper that auto-injects Bearer token and server URL.
@@ -32,15 +32,17 @@ async function request(path, options = {}) {
 }
 
 export async function syncPull(lastSyncAt) {
+  const clientId = await getClientId();
   return request('/api/sync/pull', {
     method: 'POST',
-    body: JSON.stringify({ lastSyncAt: lastSyncAt || null })
+    body: JSON.stringify({ lastSyncAt: lastSyncAt || null, clientId })
   });
 }
 
 export async function syncPush(upsert, toDelete) {
+  const clientId = await getClientId();
   return request('/api/sync/push', {
     method: 'POST',
-    body: JSON.stringify({ upsert, delete: toDelete })
+    body: JSON.stringify({ upsert, delete: toDelete, clientId })
   });
 }

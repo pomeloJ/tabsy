@@ -1267,6 +1267,11 @@
       <span class="arrow" id="settings-arrow">&#9654;</span>
     </div>
     <div class="settings-panel" id="settings-panel">
+      <label data-i18n="browserId">Browser ID</label>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <input type="text" id="client-id" readonly style="flex:1;background:#f0f0f0;cursor:default;font-family:monospace;font-size:11px;margin-bottom:0">
+        <button class="btn btn-secondary btn-sm" id="copy-client-id-btn" data-i18n="copy" style="flex:none">Copy</button>
+      </div>
       <label for="server-url" data-i18n="serverUrl">Server URL</label>
       <input type="url" id="server-url" placeholder="http://localhost:3000">
       <label for="sync-token" data-i18n="syncToken">Sync Token</label>
@@ -1284,6 +1289,13 @@
       <select id="lang-select" style="border:1px solid var(--border);border-radius:4px;font-size:12px;padding:2px 6px;background:var(--surface);cursor:pointer" onclick="event.stopPropagation()">
         <option value="en">English</option>
         <option value="zh-TW">繁體中文</option>
+      </select>
+    </div>
+
+    <!-- Timezone -->
+    <div class="settings-toggle" id="tz-toggle">
+      <span data-i18n="timezone">Timezone</span>
+      <select id="tz-select" style="border:1px solid var(--border);border-radius:4px;font-size:11px;padding:2px 6px;background:var(--surface);cursor:pointer;max-width:180px" onclick="event.stopPropagation()">
       </select>
     </div>
 

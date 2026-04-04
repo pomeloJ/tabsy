@@ -203,6 +203,74 @@ export async function removeFlow(workspaceId, flowId) {
   await save(ws);
 }
 
+// --- Client ID (persistent browser instance identifier) ---
+
+export async function getClientId() {
+  let { clientId } = await chrome.storage.local.get('clientId');
+  if (!clientId) {
+    clientId = crypto.randomUUID();
+    await chrome.storage.local.set({ clientId });
+  }
+  return clientId;
+}
+
+// --- Timezone setting (auto-detect from browser, allow override) ---
+
+const _detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+export async function getTimezone() {
+  const { tabsyTimezone } = await chrome.storage.local.get('tabsyTimezone');
+  return tabsyTimezone || _detectedTimezone;
+}
+
+export async function setTimezone(tz) {
+  await chrome.storage.local.set({ tabsyTimezone: tz || '' });
+}
+
+export function getDetectedTimezone() {
+  return _detectedTimezone;
+}
+
+/**
+ * Format an ISO date string using the saved timezone.
+ * @param {string} iso - ISO 8601 date string
+ * @param {string} tz - IANA timezone (e.g. 'Asia/Taipei')
+ * @param {object} [opts] - extra Intl.DateTimeFormat options
+ * @returns {string}
+ */
+export function formatDateTime(iso, tz, opts = {}) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+    ...opts
+  });
+}
+
+export function formatDateTimeShort(iso, tz) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
+
+export function formatTimeOnly(iso, tz) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  });
+}
+
 // --- Auto-sync setting (default: enabled) ---
 
 export async function getAutoSync() {

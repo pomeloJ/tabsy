@@ -3,7 +3,10 @@ import {
   getAll, getById, save, remove, clearAll,
   getSettings, saveSettings, getConflicts,
   getAutoSync, setAutoSync,
-  getFlows, getFlowById, saveFlow, removeFlow
+  getFlows, getFlowById, saveFlow, removeFlow,
+  getClientId,
+  getTimezone, setTimezone, getDetectedTimezone,
+  formatDateTimeShort
 } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow } from './lib/capture.js';
@@ -535,10 +538,7 @@ function syncBadge(status) {
 }
 
 function formatTime(iso) {
-  const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDateTimeShort(iso, _currentTz);
 }
 
 // --- Conflict UI ---
@@ -658,11 +658,23 @@ otherWsToggle.addEventListener('click', () => {
 const settingsToggle = document.getElementById('settings-toggle');
 const settingsArrow = document.getElementById('settings-arrow');
 const settingsPanel = document.getElementById('settings-panel');
+const clientIdInput = document.getElementById('client-id');
+const copyClientIdBtn = document.getElementById('copy-client-id-btn');
 const serverUrlInput = document.getElementById('server-url');
 const syncTokenInput = document.getElementById('sync-token');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const testConnBtn = document.getElementById('test-conn-btn');
 const settingsStatus = document.getElementById('settings-status');
+
+// Load and display client ID
+getClientId().then(id => { clientIdInput.value = id; });
+copyClientIdBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(clientIdInput.value).then(() => {
+    const orig = copyClientIdBtn.textContent;
+    copyClientIdBtn.textContent = t('copied') || 'Copied';
+    setTimeout(() => { copyClientIdBtn.textContent = orig; }, 1500);
+  });
+});
 
 settingsToggle.addEventListener('click', () => {
   settingsPanel.classList.toggle('open');
@@ -820,7 +832,7 @@ function showFlowLog(flowName) {
 function appendFlowLog(entry) {
   const div = document.createElement('div');
   div.className = 'flow-log-entry';
-  const time = new Date(entry.time).toLocaleTimeString();
+  const time = new Date(entry.time).toLocaleTimeString(undefined, { timeZone: _currentTz });
   div.innerHTML = `<span class="flow-log-time">${time}</span> <span class="flow-log-msg">${escapeHtml(entry.message)}</span>`;
   flowLogBody.appendChild(div);
   flowLogBody.scrollTop = flowLogBody.scrollHeight;
@@ -987,9 +999,46 @@ langSelect.addEventListener('change', async () => {
   renderConflictBanner();
 });
 
+// --- Timezone selector ---
+const tzSelect = document.getElementById('tz-select');
+let _currentTz = getDetectedTimezone();
+
+async function initTimezone() {
+  _currentTz = await getTimezone();
+  // Populate timezone options
+  const detected = getDetectedTimezone();
+  let zones;
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    // Fallback for older browsers
+    zones = [detected];
+  }
+  // Add auto-detect option at top
+  const autoLabel = `Auto (${detected})`;
+  tzSelect.innerHTML = `<option value="">${autoLabel}</option>` +
+    zones.map(z => `<option value="${z}" ${z === _currentTz && _currentTz !== detected ? 'selected' : ''}>${z}</option>`).join('');
+
+  // If user has a saved timezone, select it; otherwise keep "Auto"
+  const saved = (await chrome.storage.local.get('tabsyTimezone')).tabsyTimezone;
+  if (saved) {
+    tzSelect.value = saved;
+  } else {
+    tzSelect.value = '';
+  }
+}
+
+tzSelect.addEventListener('change', async () => {
+  await setTimezone(tzSelect.value);
+  _currentTz = tzSelect.value || getDetectedTimezone();
+  await detectCurrentWorkspace();
+  await renderList();
+});
+
 // --- Init (progressive: show content fast, defer heavy work) ---
 await initLocale();
 langSelect.value = getLocale();
+await initTimezone();
 applyI18n();
 initColorPicker();
 
