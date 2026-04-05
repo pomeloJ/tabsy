@@ -34,6 +34,7 @@ let original = null;    // snapshot for dirty check
 let isDirty = false;
 let saving = false;
 let detailEl = null;
+let activePanel = 'tabs'; // 'tabs' | 'flows'
 let beforeUnloadHandler = null;
 let hashChangeHandler = null;
 
@@ -100,6 +101,8 @@ function updateMeta() {
 
 // --- Full re-render ---
 function renderAll() {
+  const flowCount = (state.flows || []).length;
+
   detailEl.innerHTML = `
     <div class="ws-toprow">
       <a href="#/" class="ws-back">${svgChevronLeft} ${t('backToWorkspaces')}</a>
@@ -127,24 +130,40 @@ function renderAll() {
     </div>
     ${state.lastSyncedBy ? `<div class="ws-synced-by" style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px">${t('lastSyncedBy')}: <code style="font-size:11px;background:#f0f0f0;padding:2px 6px;border-radius:3px">${escapeHtml(state.lastSyncedBy.substring(0, 8))}…</code></div>` : ''}
 
-    <div id="ws-groups"></div>
+    <div class="ws-panel-bar">
+      <button class="ws-panel-tab ${activePanel === 'tabs' ? 'active' : ''}" data-panel="tabs">
+        ${svgTabs} ${t('tabs')}
+      </button>
+      <button class="ws-panel-tab ${activePanel === 'flows' ? 'active' : ''}" data-panel="flows">
+        ${svgFlow} ${t('flows')}${flowCount > 0 ? ` <span class="ws-panel-badge">${flowCount}</span>` : ''}
+      </button>
+    </div>
 
-    <div id="ws-flows"></div>
-
-    <div class="ws-add-section">
-      <div class="ws-add-row" id="add-tab-row">
-        <input type="url" class="ws-add-input" id="add-tab-url" placeholder="${t('addTabPlaceholder')}">
-        <button class="btn btn-sm btn-outline" id="add-tab-btn">${svgPlus} ${t('addTab')}</button>
-      </div>
-      <div class="ws-add-row" id="add-group-row">
-        <input type="text" class="ws-add-input" id="add-group-name" placeholder="${t('newGroupPlaceholder')}">
-        <div class="ws-add-color-pick" id="add-group-colors">
-          ${GROUP_COLOR_NAMES.map((c, i) => `
-            <button class="ws-gcolor-opt ${i === 0 ? 'active' : ''}" data-color="${c}" title="${c}" style="background: ${GROUP_COLORS[c]}"></button>
-          `).join('')}
+    <div class="ws-panel" id="ws-panel-tabs" ${activePanel !== 'tabs' ? 'style="display:none"' : ''}>
+      <div class="ws-add-section ws-add-top">
+        <div class="ws-add-row" id="add-tab-row">
+          <input type="url" class="ws-add-input" id="add-tab-url" placeholder="${t('addTabPlaceholder')}">
+          <button class="btn btn-sm btn-outline" id="add-tab-btn">${svgPlus} ${t('addTab')}</button>
         </div>
-        <button class="btn btn-sm btn-outline" id="add-group-btn">${svgPlus} ${t('addGroup')}</button>
       </div>
+
+      <div id="ws-groups"></div>
+
+      <div class="ws-add-section">
+        <div class="ws-add-row" id="add-group-row">
+          <input type="text" class="ws-add-input" id="add-group-name" placeholder="${t('newGroupPlaceholder')}">
+          <div class="ws-add-color-pick" id="add-group-colors">
+            ${GROUP_COLOR_NAMES.map((c, i) => `
+              <button class="ws-gcolor-opt ${i === 0 ? 'active' : ''}" data-color="${c}" title="${c}" style="background: ${GROUP_COLORS[c]}"></button>
+            `).join('')}
+          </div>
+          <button class="btn btn-sm btn-outline" id="add-group-btn">${svgPlus} ${t('addGroup')}</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ws-panel" id="ws-panel-flows" ${activePanel !== 'flows' ? 'style="display:none"' : ''}>
+      <div id="ws-flows"></div>
     </div>
   `;
 
@@ -152,8 +171,20 @@ function renderAll() {
   renderGroups();
   renderFlows();
   bindHeader();
+  bindPanelBar();
   bindAddForms();
   bindSave();
+}
+
+function bindPanelBar() {
+  detailEl.querySelectorAll('.ws-panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activePanel = tab.dataset.panel;
+      detailEl.querySelectorAll('.ws-panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === activePanel));
+      detailEl.querySelector('#ws-panel-tabs').style.display = activePanel === 'tabs' ? '' : 'none';
+      detailEl.querySelector('#ws-panel-flows').style.display = activePanel === 'flows' ? '' : 'none';
+    });
+  });
 }
 
 // --- Render groups + tabs ---
@@ -236,16 +267,12 @@ function renderFlows() {
   const flows = state.flows || [];
 
   if (flows.length === 0) {
-    flowsEl.innerHTML = '';
+    flowsEl.innerHTML = `<div class="ws-flows-empty">${t('noBlocks')}</div>`;
     return;
   }
 
   flowsEl.innerHTML = `
     <div class="ws-flows-section">
-      <div class="ws-flows-header">
-        <span class="ws-flows-title">${svgFlow} ${t('flows')}</span>
-        <span class="ws-flows-count">${flows.length}</span>
-      </div>
       ${flows.map(f => renderFlowCard(f)).join('')}
     </div>
   `;
@@ -976,3 +1003,4 @@ const svgCheck = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" st
 const svgLoader = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ws-spin"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>';
 const svgExternalLink = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 const svgGrip = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
+const svgTabs = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v6"/></svg>';
