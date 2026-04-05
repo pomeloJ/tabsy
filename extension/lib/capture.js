@@ -52,11 +52,13 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     index: i
   }));
 
-  // Preserve existing flows when recapturing
+  // Preserve existing flows and notes when recapturing
   let existingFlows = [];
+  let existingNotes = [];
   if (existingId) {
     const existing = await getById(existingId);
     if (existing?.flows) existingFlows = existing.flows;
+    if (existing?.notes) existingNotes = existing.notes;
   }
 
   return {
@@ -67,6 +69,7 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     groups,
     tabs: workspaceTabs,
     flows: existingFlows,
+    notes: existingNotes,
     syncStatus: existingId ? 'pending' : 'local_only'
   };
 }
@@ -78,17 +81,36 @@ export async function captureWindow(windowId, name, color, existingId = null) {
 export async function detectWorkspaceWindows() {
   const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
   const workspaces = await getAll();
+  const wsById = new Map(workspaces.map(w => [w.id, w]));
   const results = [];
 
   for (const win of windows) {
     const tabs = await chrome.tabs.query({ windowId: win.id });
     const markerTab = tabs.find(t => isMarkerUrl(t.url));
-    if (!markerTab || markerTab.groupId === -1) continue;
+    if (!markerTab) continue;
 
+    // Parse workspace ID directly from marker URL query params
     try {
-      const group = await chrome.tabGroups.get(markerTab.groupId);
-      const wsName = group.title?.replace(/^📂\s*/, '') || '';
-      const ws = workspaces.find(w => w.name === wsName);
+      const markerParams = new URL(markerTab.url).searchParams;
+      const wsId = markerParams.get('id');
+      const ws = wsId ? wsById.get(wsId) : null;
+
+      // Fallback: match by group title if URL has no id param (legacy markers)
+      if (!ws && markerTab.groupId !== -1) {
+        const group = await chrome.tabGroups.get(markerTab.groupId);
+        const wsName = group.title?.replace(/^📂\s*/, '') || '';
+        const matched = workspaces.find(w => w.name === wsName);
+        if (matched) {
+          results.push({
+            windowId: win.id,
+            workspaceId: matched.id,
+            workspaceName: matched.name,
+            workspaceColor: matched.color
+          });
+        }
+        continue;
+      }
+
       if (ws) {
         results.push({
           windowId: win.id,
@@ -97,7 +119,7 @@ export async function detectWorkspaceWindows() {
           workspaceColor: ws.color
         });
       }
-    } catch { /* group may not exist */ }
+    } catch { /* marker URL parse or group fetch failed */ }
   }
 
   return results;

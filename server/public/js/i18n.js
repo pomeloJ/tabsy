@@ -101,6 +101,18 @@ const locales = {
     workspaceSaved: 'Workspace saved',
     failedToSaveWorkspace: 'Failed to save workspace',
 
+    // Notes
+    notesLabel: 'Notes',
+    noNotes: 'No notes yet.',
+    addNote: 'Add Note',
+    editNote: 'Edit Note',
+    notesPlaceholder: 'Write notes in Markdown...',
+    preview: 'Preview',
+    edit: 'Edit',
+    addLink: 'Add Link',
+    noLinks: 'No links',
+    unlinked: 'Unlinked',
+
     // Flows (read-only in workspace detail)
     flows: 'Flows',
     blocks: 'Blocks',
@@ -379,6 +391,17 @@ const locales = {
     url: '網址',
     workspaceSaved: '工作區已儲存',
     failedToSaveWorkspace: '儲存工作區失敗',
+
+    notesLabel: '筆記',
+    noNotes: '尚無筆記。',
+    addNote: '新增筆記',
+    editNote: '編輯筆記',
+    notesPlaceholder: '使用 Markdown 撰寫筆記...',
+    preview: '預覽',
+    edit: '編輯',
+    addLink: '新增關聯',
+    noLinks: '無關聯',
+    unlinked: '未關聯',
 
     flows: '流程',
     blocks: '區塊',

@@ -34,22 +34,22 @@ router.use('/workspaces', requireAuth);
 
 // Prepared statements
 const listWorkspaces = db.prepare(
-  'SELECT id, name, color, saved_at, updated_at, last_synced_by, groups, tabs, flows FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
+  'SELECT id, name, color, saved_at, updated_at, last_synced_by, groups, tabs, flows, notes FROM workspaces WHERE user_id = ? ORDER BY saved_at DESC'
 );
 const getWorkspace = db.prepare(
   'SELECT * FROM workspaces WHERE id = ? AND user_id = ?'
 );
 const insertWorkspace = db.prepare(
-  'INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 const updateWorkspace = db.prepare(
-  'UPDATE workspaces SET name = ?, color = ?, saved_at = ?, groups = ?, tabs = ?, flows = ?, updated_at = datetime(\'now\') WHERE id = ? AND user_id = ?'
+  "UPDATE workspaces SET name = ?, color = ?, saved_at = ?, groups = ?, tabs = ?, flows = ?, notes = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND user_id = ?"
 );
 const deleteWorkspace = db.prepare(
   'DELETE FROM workspaces WHERE id = ? AND user_id = ?'
 );
 const recordDeletion = db.prepare(
-  'INSERT OR REPLACE INTO deleted_workspaces (id, user_id, deleted_at) VALUES (?, ?, datetime(\'now\'))'
+  "INSERT OR REPLACE INTO deleted_workspaces (id, user_id, deleted_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
 );
 
 // Sync prepared statements
@@ -60,8 +60,8 @@ const getDeletedSince = db.prepare(
   'SELECT id FROM deleted_workspaces WHERE user_id = ? AND deleted_at > ?'
 );
 const upsertWorkspace = db.prepare(`
-  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, updated_at, last_synced_by)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+  INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, notes, updated_at, last_synced_by)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)
   ON CONFLICT(id) DO UPDATE SET
     name = excluded.name,
     color = excluded.color,
@@ -69,7 +69,8 @@ const upsertWorkspace = db.prepare(`
     groups = excluded.groups,
     tabs = excluded.tabs,
     flows = excluded.flows,
-    updated_at = datetime('now'),
+    notes = excluded.notes,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
     last_synced_by = excluded.last_synced_by
   WHERE excluded.saved_at >= workspaces.saved_at
 `);
@@ -94,7 +95,8 @@ router.get('/workspaces', (req, res) => {
         tabCount: safeJsonParse(r.tabs).length,
         groupCount: groups.length,
         flowCount: flows.length,
-        groupSummary: groups.slice(0, 4).map(g => ({ title: g.title, color: g.color }))
+        groupSummary: groups.slice(0, 4).map(g => ({ title: g.title, color: g.color })),
+        hasNotes: safeJsonParse(r.notes, []).length > 0
       };
     })
   });
@@ -115,13 +117,14 @@ router.get('/workspaces/:id', (req, res) => {
     lastSyncedBy: row.last_synced_by || null,
     groups: safeJsonParse(row.groups),
     tabs: safeJsonParse(row.tabs),
-    flows: safeJsonParse(row.flows || '[]')
+    flows: safeJsonParse(row.flows || '[]'),
+    notes: safeJsonParse(row.notes, [])
   });
 });
 
 // POST /api/workspaces
 router.post('/workspaces', (req, res) => {
-  const { id, name, color, savedAt, groups, tabs, flows } = req.body;
+  const { id, name, color, savedAt, groups, tabs, flows, notes } = req.body;
 
   if (!id || !name || !color || !savedAt) {
     return res.status(400).json({ error: 'id, name, color, and savedAt are required' });
@@ -129,19 +132,22 @@ router.post('/workspaces', (req, res) => {
   if (!isValidId(id)) {
     return res.status(400).json({ error: 'Invalid workspace ID format' });
   }
+  const wsNotes = JSON.stringify(notes || []);
 
   try {
     insertWorkspace.run(
       id, req.userId, name, color, savedAt,
       JSON.stringify(groups || []),
       JSON.stringify(tabs || []),
-      JSON.stringify(flows || [])
+      JSON.stringify(flows || []),
+      wsNotes
     );
     res.status(201).json({
       id, name, color, savedAt,
       groups: groups || [],
       tabs: tabs || [],
-      flows: flows || []
+      flows: flows || [],
+      notes: notes || []
     });
   } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
@@ -153,7 +159,7 @@ router.post('/workspaces', (req, res) => {
 
 // PUT /api/workspaces/:id
 router.put('/workspaces/:id', (req, res) => {
-  const { name, color, savedAt, groups, tabs, flows } = req.body;
+  const { name, color, savedAt, groups, tabs, flows, notes } = req.body;
 
   if (!name || !color || !savedAt) {
     return res.status(400).json({ error: 'name, color, and savedAt are required' });
@@ -164,6 +170,7 @@ router.put('/workspaces/:id', (req, res) => {
     JSON.stringify(groups || []),
     JSON.stringify(tabs || []),
     JSON.stringify(flows || []),
+    JSON.stringify(notes || []),
     req.params.id, req.userId
   );
 
@@ -180,7 +187,8 @@ router.put('/workspaces/:id', (req, res) => {
     updatedAt: utc(row.updated_at),
     groups: safeJsonParse(row.groups),
     tabs: safeJsonParse(row.tabs),
-    flows: safeJsonParse(row.flows || '[]')
+    flows: safeJsonParse(row.flows || '[]'),
+    notes: safeJsonParse(row.notes, [])
   });
 });
 
@@ -211,7 +219,8 @@ router.post('/sync/pull', (req, res) => {
     lastSyncedBy: r.last_synced_by || null,
     groups: safeJsonParse(r.groups),
     tabs: safeJsonParse(r.tabs),
-    flows: safeJsonParse(r.flows || '[]')
+    flows: safeJsonParse(r.flows || '[]'),
+    notes: safeJsonParse(r.notes, [])
   }));
 
   const deletedRows = getDeletedSince.all(req.userId, since);
@@ -264,7 +273,8 @@ router.post('/sync/push', (req, res) => {
             savedAt: utc(existing.saved_at),
             groups: safeJsonParse(existing.groups),
             tabs: safeJsonParse(existing.tabs),
-            flows: safeJsonParse(existing.flows || '[]')
+            flows: safeJsonParse(existing.flows || '[]'),
+            notes: safeJsonParse(existing.notes, [])
           },
           resolution: 'server_wins'
         });
@@ -276,6 +286,7 @@ router.post('/sync/push', (req, res) => {
         JSON.stringify(ws.groups || []),
         JSON.stringify(ws.tabs || []),
         JSON.stringify(ws.flows || []),
+        JSON.stringify(ws.notes || []),
         clientId || null
       );
     }

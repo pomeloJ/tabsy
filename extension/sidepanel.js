@@ -42,6 +42,7 @@ const saveNewToggle = document.getElementById('save-new-toggle');
 const saveNewArrow = document.getElementById('save-new-arrow');
 const saveSection = document.getElementById('save-section');
 const currentWsFlows = document.getElementById('current-ws-flows');
+const currentWsNotes = document.getElementById('current-ws-notes');
 const otherWsToggle = document.getElementById('other-ws-toggle');
 const otherWsArrow = document.getElementById('other-ws-arrow');
 const otherWsBody = document.getElementById('other-ws-body');
@@ -268,6 +269,7 @@ async function detectCurrentWorkspace() {
       currentWsMeta.style.display = 'none';
       currentWsActions.style.display = 'none';
       currentWsFlows.style.display = 'none';
+      currentWsNotes.style.display = 'none';
       // No workspace — show save section directly, hide toggle
       saveNewToggle.style.display = 'none';
       saveSection.classList.remove('collapsed');
@@ -292,13 +294,15 @@ async function detectCurrentWorkspace() {
       saveNewToggle.style.display = 'flex';
       saveSection.classList.add('collapsed');
       saveNewArrow.classList.remove('open');
-      // Render current workspace flows
+      // Render current workspace flows and notes
       renderCurrentWsFlows(ws);
+      renderCurrentWsNotes(ws);
     } else {
       currentWorkspaceData = null;
       currentWsMeta.style.display = 'none';
       currentWsActions.style.display = 'none';
       currentWsFlows.style.display = 'none';
+      currentWsNotes.style.display = 'none';
       saveNewToggle.style.display = 'none';
       saveSection.classList.remove('collapsed');
     }
@@ -308,6 +312,7 @@ async function detectCurrentWorkspace() {
     currentWsMeta.style.display = 'none';
     currentWsActions.style.display = 'none';
     currentWsFlows.style.display = 'none';
+    currentWsNotes.style.display = 'none';
     saveNewToggle.style.display = 'none';
     saveSection.classList.remove('collapsed');
   }
@@ -407,6 +412,176 @@ currentWsFlows.addEventListener('dblclick', (e) => {
   startRenameFlow(el, el.dataset.ws, el.dataset.editFlow);
 });
 
+// --- Render current workspace notes (collapsible) ---
+let _notesCollapsed = false;
+
+function renderCurrentWsNotes(ws) {
+  const notes = ws.notes || [];
+  const groups = ws.groups || [];
+  const tabs = ws.tabs || [];
+
+  // Helper: find notes linked to a target
+  const notesFor = (type, id) => notes.filter(n => n.links?.some(l =>
+    type === 'workspace' ? l.type === 'workspace' :
+    type === 'group' ? (l.type === 'group' && l.groupId === id) :
+    type === 'tab' ? (l.type === 'tab' && l.url === id) : false
+  ));
+
+  const notePreview = (noteList) => {
+    if (noteList.length === 0) return '';
+    return noteList.map(n => {
+      const preview = n.content.length > 60 ? n.content.slice(0, 60) + '…' : n.content;
+      return `<div class="notes-tree-note" data-note-id="${n.id}">${escapeHtml(preview)}</div>`;
+    }).join('');
+  };
+
+  let html = `<div class="notes-section-header" id="notes-toggle">
+    <span>${t('notes')}${notes.length ? ` (${notes.length})` : ''}</span>
+    <span class="arrow ${_notesCollapsed ? '' : 'open'}">&#9654;</span>
+  </div>`;
+  html += `<div class="notes-list ${_notesCollapsed ? 'collapsed' : ''}">`;
+
+  // Workspace
+  const wsNotes = notesFor('workspace');
+  html += `<div class="note-tree-item">
+    <div class="note-tree-row">
+      <span class="note-item-icon">📂</span>
+      <span class="note-item-label">${escapeHtml(ws.name)}</span>
+      <button class="note-tree-add" data-add-for="workspace">+</button>
+    </div>
+    ${notePreview(wsNotes)}
+  </div>`;
+
+  // Groups
+  for (const g of groups) {
+    const gNotes = notesFor('group', g.groupId);
+    html += `<div class="note-tree-item">
+      <div class="note-tree-row">
+        <span class="note-item-icon">📁</span>
+        <span class="note-item-label">${escapeHtml(g.title || t('untitled'))}</span>
+        <button class="note-tree-add" data-add-for="group" data-gid="${g.groupId}">+</button>
+      </div>
+      ${notePreview(gNotes)}
+    </div>`;
+  }
+
+  // All tabs
+  for (const tab of tabs) {
+    const tNotes = notesFor('tab', tab.url);
+    const isActive = tab.url === _activeTabUrl;
+    html += `<div class="note-tree-item ${isActive ? 'active-tab' : ''}">
+      <div class="note-tree-row">
+        <span class="note-item-icon">📄</span>
+        <span class="note-item-label">${escapeHtml(tab.title || tab.url)}</span>
+        <button class="note-tree-add" data-add-for="tab" data-url="${escapeHtml(tab.url)}">+</button>
+      </div>
+      ${notePreview(tNotes)}
+    </div>`;
+  }
+
+  // Unlinked notes
+  const linkedIds = new Set();
+  notes.forEach(n => { if (n.links?.length > 0) linkedIds.add(n.id); });
+  const unlinked = notes.filter(n => !n.links || n.links.length === 0);
+  if (unlinked.length > 0) {
+    html += `<div class="note-tree-item unlinked">
+      <div class="note-tree-row"><span class="note-item-icon">📌</span><span class="note-item-label" style="opacity:0.6">${t('unlinked') || 'Unlinked'}</span></div>
+      ${notePreview(unlinked)}
+    </div>`;
+  }
+
+  html += '</div>';
+  currentWsNotes.innerHTML = html;
+  currentWsNotes.style.display = 'block';
+
+  // Toggle collapse
+  currentWsNotes.querySelector('#notes-toggle')?.addEventListener('click', () => {
+    _notesCollapsed = !_notesCollapsed;
+    const arrow = currentWsNotes.querySelector('.arrow');
+    arrow.classList.toggle('open', !_notesCollapsed);
+    currentWsNotes.querySelector('.notes-list').classList.toggle('collapsed', _notesCollapsed);
+  });
+
+  // Click note to edit
+  currentWsNotes.querySelectorAll('.notes-tree-note').forEach(el => {
+    el.addEventListener('click', () => {
+      openNoteEditor(ws, el.dataset.noteId);
+    });
+  });
+
+  // Add note for item
+  currentWsNotes.querySelectorAll('.note-tree-add').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const forType = btn.dataset.addFor;
+      const link = forType === 'workspace' ? { type: 'workspace' } :
+                   forType === 'group' ? { type: 'group', groupId: btn.dataset.gid } :
+                   { type: 'tab', url: btn.dataset.url };
+      const note = { id: 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), content: '', links: [link], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      if (!ws.notes) ws.notes = [];
+      ws.notes.push(note);
+      ws.savedAt = new Date().toISOString();
+      ws.syncStatus = ws.syncStatus === 'local_only' ? 'local_only' : 'pending';
+      save(ws).then(() => {
+        openNoteEditor(ws, note.id);
+        renderCurrentWsNotes(ws);
+      });
+    });
+  });
+}
+
+function openNoteEditor(ws, noteId) {
+  const note = (ws.notes || []).find(n => n.id === noteId);
+  if (!note) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'notes-edit-overlay';
+
+  // Build link label
+  const linkLabels = (note.links || []).map(l => {
+    if (l.type === 'workspace') return `📂 ${ws.name}`;
+    if (l.type === 'group') { const g = (ws.groups || []).find(g => g.groupId === l.groupId); return `📁 ${g ? g.title : l.groupId}`; }
+    if (l.type === 'tab') { const tab = (ws.tabs || []).find(t => t.url === l.url); return `📄 ${tab ? tab.title : l.url}`; }
+    return '?';
+  });
+
+  overlay.innerHTML = `
+    <div class="notes-edit-header">
+      <button class="back-btn">&larr;</button>
+      <span class="title">${t('editNote') || 'Edit Note'}</span>
+    </div>
+    <div class="notes-edit-links">${linkLabels.map(l => `<span class="note-edit-link-chip">${escapeHtml(l)}</span>`).join('')}</div>
+    <div class="notes-edit-body">
+      <textarea maxlength="2000" placeholder="${t('notesPlaceholder')}">${escapeHtml(note.content)}</textarea>
+    </div>
+    <div class="notes-edit-footer"><span class="char-count">${note.content.length} / 2000</span></div>
+  `;
+  document.body.appendChild(overlay);
+
+  const textarea = overlay.querySelector('textarea');
+  const charCount = overlay.querySelector('.char-count');
+  textarea.focus();
+
+  textarea.addEventListener('input', () => {
+    charCount.textContent = `${textarea.value.length} / 2000`;
+  });
+
+  const close = async () => {
+    const newText = textarea.value;
+    if (newText !== note.content) {
+      note.content = newText;
+      note.updatedAt = new Date().toISOString();
+      ws.savedAt = new Date().toISOString();
+      ws.syncStatus = ws.syncStatus === 'local_only' ? 'local_only' : 'pending';
+      await save(ws);
+      renderCurrentWsNotes(ws);
+    }
+    overlay.remove();
+  };
+
+  overlay.querySelector('.back-btn').addEventListener('click', close);
+}
+
 // --- Render workspace list (differential) ---
 
 // Cache of last-rendered card HTML keyed by workspace id
@@ -417,7 +592,7 @@ function buildCardHtml(w, wsFlows) {
   return `
       <div class="ws-card-header">
         <div class="ws-card-dot" style="background:${safeColor(w.color)}"></div>
-        <div class="ws-card-name">${escapeHtml(w.name)}</div>
+        <div class="ws-card-name">${escapeHtml(w.name)}${(w.notes || []).length > 0 ? ` <span class="ws-card-notes-badge">📝</span>` : ''}</div>
         ${syncBadge(w.syncStatus)}
       </div>
       <div class="ws-card-meta">
@@ -427,6 +602,7 @@ function buildCardHtml(w, wsFlows) {
       ${renderFlowChips(w.id, wsFlows)}
       <div class="ws-card-actions">
         <button class="btn btn-primary btn-sm" data-restore="${w.id}">${t('restore')}</button>
+        <button class="btn btn-secondary btn-sm" data-notes="${w.id}">📝</button>
         <button class="btn btn-danger btn-sm" data-delete="${w.id}">${t('delete')}</button>
       </div>`;
 }
@@ -509,7 +685,7 @@ async function renderList() {
 
 // --- Event delegation on wsList (single listener, never re-attached) ---
 wsList.addEventListener('click', async (e) => {
-  const target = e.target.closest('[data-restore], [data-delete], [data-resolve], [data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
+  const target = e.target.closest('[data-restore], [data-delete], [data-notes], [data-resolve], [data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
   if (!target) return;
 
   if (target.dataset.restore) {
@@ -523,6 +699,23 @@ wsList.addEventListener('click', async (e) => {
     await remove(target.dataset.delete);
     await renderList();
     triggerAutoSync();
+  } else if (target.dataset.notes) {
+    const ws = await getById(target.dataset.notes);
+    if (ws) {
+      // Find or create a workspace-linked note
+      const existing = (ws.notes || []).find(n => n.links?.some(l => l.type === 'workspace'));
+      if (existing) {
+        openNoteEditor(ws, existing.id);
+      } else {
+        const note = { id: 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), content: '', links: [{ type: 'workspace' }], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        if (!ws.notes) ws.notes = [];
+        ws.notes.push(note);
+        ws.savedAt = new Date().toISOString();
+        ws.syncStatus = ws.syncStatus === 'local_only' ? 'local_only' : 'pending';
+        await save(ws);
+        openNoteEditor(ws, note.id);
+      }
+    }
   } else if (target.dataset.resolve) {
     target.disabled = true;
     await resolveConflict(target.dataset.resolve, target.dataset.action);
@@ -1164,7 +1357,7 @@ chrome.tabs.onActivated.addListener(async () => {
   renderList();
   if (currentWorkspaceData) {
     const ws = await getById(currentWorkspaceData.id);
-    if (ws) renderCurrentWsFlows(ws);
+    if (ws) { renderCurrentWsFlows(ws); renderCurrentWsNotes(ws); }
   }
 });
 chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo) => {
@@ -1173,6 +1366,6 @@ chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo) => {
   renderList();
   if (currentWorkspaceData) {
     const ws = await getById(currentWorkspaceData.id);
-    if (ws) renderCurrentWsFlows(ws);
+    if (ws) { renderCurrentWsFlows(ws); renderCurrentWsNotes(ws); }
   }
 });

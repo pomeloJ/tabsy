@@ -48,15 +48,15 @@ db.exec(`
     saved_at TEXT NOT NULL,
     groups TEXT NOT NULL DEFAULT '[]',
     tabs TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS deleted_workspaces (
     id TEXT NOT NULL,
     user_id INTEGER NOT NULL,
-    deleted_at TEXT DEFAULT (datetime('now')),
+    deleted_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (id, user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -144,6 +144,84 @@ db.exec(`
     PRIMARY KEY (user_id, key),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+`);
+
+// Migration: add notes column to workspaces
+const wsColumns3 = db.prepare("PRAGMA table_info(workspaces)").all();
+if (!wsColumns3.find(c => c.name === 'notes')) {
+  db.exec("ALTER TABLE workspaces ADD COLUMN notes TEXT NOT NULL DEFAULT '[]'");
+}
+
+// Migration: convert notes from plain text / embedded format to JSON array
+{
+  const rows = db.prepare("SELECT id, notes, groups, tabs FROM workspaces WHERE notes != '[]'").all();
+  const updateStmt = db.prepare("UPDATE workspaces SET notes = ?, groups = ?, tabs = ? WHERE id = ?");
+  for (const row of rows) {
+    // Skip already-migrated rows
+    if (row.notes && row.notes.trim().startsWith('[')) continue;
+
+    const noteObjs = [];
+    const now = new Date().toISOString();
+
+    // Convert workspace-level plain text notes
+    if (row.notes && row.notes.trim()) {
+      noteObjs.push({
+        id: `n-migrated-ws-${row.id}`,
+        content: row.notes,
+        links: [{ type: 'workspace' }],
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+
+    // Convert group-level notes
+    let groups = [];
+    try { groups = JSON.parse(row.groups || '[]'); } catch {}
+    for (const g of groups) {
+      if (g.notes) {
+        noteObjs.push({
+          id: `n-migrated-g-${g.groupId}`,
+          content: g.notes,
+          links: [{ type: 'group', groupId: g.groupId }],
+          createdAt: now,
+          updatedAt: now
+        });
+        delete g.notes;
+      }
+    }
+
+    // Convert tab-level notes
+    let tabs = [];
+    try { tabs = JSON.parse(row.tabs || '[]'); } catch {}
+    for (const t of tabs) {
+      if (t.notes) {
+        noteObjs.push({
+          id: `n-migrated-t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          content: t.notes,
+          links: [{ type: 'tab', url: t.url }],
+          createdAt: now,
+          updatedAt: now
+        });
+        delete t.notes;
+      }
+    }
+
+    updateStmt.run(
+      JSON.stringify(noteObjs.length > 0 ? noteObjs : []),
+      JSON.stringify(groups),
+      JSON.stringify(tabs),
+      row.id
+    );
+  }
+}
+
+// Migration: convert datetime('now') format ("YYYY-MM-DD HH:MM:SS") to ISO 8601 ("YYYY-MM-DDTHH:MM:SS.SSSZ")
+// so that string comparisons in pull queries work correctly
+db.exec(`
+  UPDATE workspaces SET updated_at = REPLACE(updated_at, ' ', 'T') || 'Z'
+    WHERE updated_at LIKE '____-__-__ __:__:__' AND updated_at NOT LIKE '%T%';
+  UPDATE deleted_workspaces SET deleted_at = REPLACE(deleted_at, ' ', 'T') || 'Z'
+    WHERE deleted_at LIKE '____-__-__ __:__:__' AND deleted_at NOT LIKE '%T%';
 `);
 
 module.exports = db;

@@ -181,7 +181,7 @@ function restoreBackup(backupJson, userId, mode = 'merge') {
   const getWs = db.prepare('SELECT id FROM workspaces WHERE id = ? AND user_id = ?');
   const upsertWs = db.prepare(`
     INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       color = excluded.color,
@@ -189,7 +189,7 @@ function restoreBackup(backupJson, userId, mode = 'merge') {
       groups = excluded.groups,
       tabs = excluded.tabs,
       flows = excluded.flows,
-      updated_at = datetime('now')
+      updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   `);
   const insertWs = db.prepare(
     'INSERT INTO workspaces (id, user_id, name, color, saved_at, groups, tabs, flows) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
