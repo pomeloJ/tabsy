@@ -340,6 +340,7 @@ const svgFlow = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" str
 function renderTab(tab, idx) {
   const faviconUrl = getFaviconUrl(tab.url);
   const groups = state.groups || [];
+  const stateIdx = state.tabs.indexOf(tab);
   const moveOptions = [
     `<option value="">${t('moveTo')}</option>`,
     ...groups.map(g => `<option value="${g.groupId}" ${tab.groupId === g.groupId ? 'disabled' : ''}>${escapeHtml(g.title || t('untitled'))}</option>`),
@@ -347,7 +348,8 @@ function renderTab(tab, idx) {
   ].join('');
 
   return `
-    <div class="ws-tab" data-tab-idx="${idx}" data-tab-url="${escapeAttr(tab.url)}">
+    <div class="ws-tab" data-tab-idx="${idx}" data-tab-url="${escapeAttr(tab.url)}" data-state-idx="${stateIdx}" draggable="true">
+      <span class="ws-tab-drag-handle" title="Drag to reorder">${svgGrip}</span>
       <span class="ws-tab-favicon">
         ${faviconUrl ? `<img src="${faviconUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
       </span>
@@ -483,6 +485,155 @@ function bindGroupEvents(groupsEl) {
         moveTab(url, fromGid, toGid);
       }
       sel.value = '';
+    });
+  });
+
+  // --- Drag and drop reordering ---
+  let dragStateIdx = null;
+  let dropPosition = null; // 'before' or 'after', tracked from dragover
+
+  groupsEl.querySelectorAll('.ws-tab[draggable="true"]').forEach(tabEl => {
+    tabEl.addEventListener('dragstart', (e) => {
+      dragStateIdx = parseInt(tabEl.dataset.stateIdx, 10);
+      tabEl.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragStateIdx.toString());
+    });
+
+    tabEl.addEventListener('dragend', () => {
+      tabEl.classList.remove('dragging');
+      dragStateIdx = null;
+      dropPosition = null;
+      groupsEl.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+        el.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      groupsEl.querySelectorAll('.ws-group-tabs.drag-over-empty').forEach(el => {
+        el.classList.remove('drag-over-empty');
+      });
+    });
+
+    tabEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const targetIdx = parseInt(tabEl.dataset.stateIdx, 10);
+      if (targetIdx === dragStateIdx) return;
+
+      // Determine top/bottom half
+      const rect = tabEl.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const isTop = e.clientY < midY;
+
+      // Track position for drop handler (avoids clientY mismatch between dragover/drop)
+      dropPosition = isTop ? 'before' : 'after';
+
+      tabEl.classList.toggle('drag-over-top', isTop);
+      tabEl.classList.toggle('drag-over-bottom', !isTop);
+    });
+
+    tabEl.addEventListener('dragleave', () => {
+      tabEl.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+
+    tabEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tabEl.classList.remove('drag-over-top', 'drag-over-bottom');
+
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      const toIdx = parseInt(tabEl.dataset.stateIdx, 10);
+      console.log('[drag-drop] fromIdx:', fromIdx, 'toIdx:', toIdx, 'dropPosition:', dropPosition);
+
+      if (fromIdx === toIdx || isNaN(fromIdx) || isNaN(toIdx)) {
+        console.log('[drag-drop] skipped: same index or NaN');
+        return;
+      }
+
+      const draggedTab = state.tabs[fromIdx];
+      if (!draggedTab) {
+        console.log('[drag-drop] skipped: no dragged tab at', fromIdx);
+        return;
+      }
+
+      // Save reference to target tab BEFORE any mutation
+      const targetTab = state.tabs[toIdx];
+      console.log('[drag-drop] draggedTab:', draggedTab?.url, 'targetTab:', targetTab?.url);
+
+      // Determine target group from drop target
+      const targetGroupEl = tabEl.closest('.ws-group');
+      const targetGid = targetGroupEl?.dataset.groupId || null;
+      draggedTab.groupId = targetGid;
+      console.log('[drag-drop] targetGid:', targetGid);
+
+      // Remove from old position
+      state.tabs.splice(fromIdx, 1);
+
+      // Find where target tab ended up after removal
+      let insertIdx = state.tabs.indexOf(targetTab);
+      console.log('[drag-drop] indexOf(targetTab) after splice:', insertIdx, 'targetTab is undefined?', targetTab === undefined);
+
+      if (insertIdx === -1) insertIdx = state.tabs.length;
+
+      // Use tracked position from dragover (more reliable than drop event clientY)
+      if (dropPosition === 'after') insertIdx++;
+      console.log('[drag-drop] final insertIdx:', insertIdx, 'array length:', state.tabs.length);
+
+      state.tabs.splice(insertIdx, 0, draggedTab);
+
+      // Log final group order
+      const finalGroupTabs = state.tabs.filter(t => (t.groupId || null) === targetGid);
+      console.log('[drag-drop] final order in group:', finalGroupTabs.map(t => t.url));
+
+      dropPosition = null;
+      markDirty();
+      renderGroups();
+    });
+  });
+
+  // Allow dropping on empty group tab areas
+  groupsEl.querySelectorAll('.ws-group-tabs').forEach(tabsContainer => {
+    tabsContainer.addEventListener('dragover', (e) => {
+      // Only handle if the direct target is the container (not a child tab)
+      if (e.target === tabsContainer || e.target.closest('.ws-tab-empty')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        tabsContainer.classList.add('drag-over-empty');
+      }
+    });
+
+    tabsContainer.addEventListener('dragleave', (e) => {
+      if (!tabsContainer.contains(e.relatedTarget) || e.relatedTarget === tabsContainer) {
+        tabsContainer.classList.remove('drag-over-empty');
+      }
+    });
+
+    tabsContainer.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tabsContainer.classList.remove('drag-over-empty');
+
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      if (isNaN(fromIdx)) return;
+
+      const draggedTab = state.tabs[fromIdx];
+      if (!draggedTab) return;
+
+      const groupEl = tabsContainer.closest('.ws-group');
+      const targetGid = groupEl?.dataset.groupId || null;
+      draggedTab.groupId = targetGid;
+
+      // Move to end of this group's tabs
+      state.tabs.splice(fromIdx, 1);
+      // Find last tab in target group to insert after
+      let insertIdx = state.tabs.length;
+      for (let i = state.tabs.length - 1; i >= 0; i--) {
+        if ((state.tabs[i].groupId || null) === targetGid) {
+          insertIdx = i + 1;
+          break;
+        }
+      }
+      state.tabs.splice(insertIdx, 0, draggedTab);
+      markDirty();
+      renderGroups();
     });
   });
 }
@@ -824,3 +975,4 @@ const svgSave = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" str
 const svgCheck = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const svgLoader = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ws-spin"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>';
 const svgExternalLink = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+const svgGrip = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';

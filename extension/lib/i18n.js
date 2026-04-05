@@ -43,6 +43,8 @@ const locales = {
     deleteConfirm: 'Delete "{name}"?',
     deleteFlowConfirm: 'Delete this flow?',
     restore: 'Restore',
+    secondsAgo: 's ago',
+    minutesAgo: 'm ago',
     // Sync status badges
     syncedBadge: '&#x2713; Synced',
     localBadge: '&#x25cf; Local',
@@ -237,6 +239,8 @@ const locales = {
     deleteConfirm: '刪除「{name}」？',
     deleteFlowConfirm: '刪除此流程？',
     restore: '還原',
+    secondsAgo: ' 秒前',
+    minutesAgo: ' 分鐘前',
     syncedBadge: '&#x2713; 已同步',
     localBadge: '&#x25cf; 本地',
     pendingBadge: '&#x21bb; 待同步',

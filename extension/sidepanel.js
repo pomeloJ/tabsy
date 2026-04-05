@@ -10,7 +10,7 @@ import {
 } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { serverNow, getClockOffset } from './lib/api-client.js';
-import { captureWindow } from './lib/capture.js';
+import { captureWindow, detectWorkspaceWindows } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES, TRIGGER_TYPES } from './lib/flow-schema.js';
@@ -158,11 +158,23 @@ async function restoreWorkspace(workspace) {
     index: 0
   });
 
-  // Create all tabs
+  // Create all tabs — order: pinned, then grouped (by group order), then ungrouped
   const createdTabs = [];
+  const groups = workspace.groups || [];
+  const groupOrder = new Map(groups.map((g, i) => [g.groupId, i]));
+
   const pinnedTabs = workspace.tabs.filter(t => t.pinned);
   const normalTabs = workspace.tabs.filter(t => !t.pinned);
-  const orderedTabs = [...pinnedTabs, ...normalTabs];
+
+  // Separate grouped vs ungrouped, sort grouped tabs so same-group tabs are adjacent
+  const groupedNormal = normalTabs.filter(t => t.groupId && groupOrder.has(t.groupId));
+  const ungroupedNormal = normalTabs.filter(t => !t.groupId || !groupOrder.has(t.groupId));
+  groupedNormal.sort((a, b) => groupOrder.get(a.groupId) - groupOrder.get(b.groupId));
+
+  const orderedTabs = [...pinnedTabs, ...groupedNormal, ...ungroupedNormal];
+
+  console.log('[restore] workspace.tabs order:', workspace.tabs.map(t => `${t.url}(${t.groupId || 'none'})`));
+  console.log('[restore] orderedTabs:', orderedTabs.map(t => `${t.url}(${t.groupId || 'none'})`));
 
   for (const tab of orderedTabs) {
     const created = await chrome.tabs.create({
@@ -174,6 +186,8 @@ async function restoreWorkspace(workspace) {
     createdTabs.push({ spec: tab, tabId: created.id });
   }
 
+  console.log('[restore] createdTabs:', createdTabs.map(ct => `${ct.spec.url} → chromeId:${ct.tabId}`));
+
   // Create tab groups
   const groupMap = {}; // workspace groupId → chrome groupId
   for (const group of workspace.groups) {
@@ -182,6 +196,8 @@ async function restoreWorkspace(workspace) {
       .map(ct => ct.tabId);
     if (tabIds.length === 0) continue;
 
+    console.log(`[restore] grouping "${group.title}" (${group.groupId}): tabIds=`, tabIds);
+
     const chromeGroupId = await chrome.tabs.group({ tabIds, createProperties: { windowId: newWin.id } });
     await chrome.tabGroups.update(chromeGroupId, {
       title: group.title,
@@ -189,6 +205,31 @@ async function restoreWorkspace(workspace) {
       collapsed: group.collapsed
     });
     groupMap[group.groupId] = chromeGroupId;
+
+    // Log tab order after grouping
+    const afterGroup = await Promise.all(tabIds.map(id => chrome.tabs.get(id)));
+    console.log(`[restore] after group "${group.title}":`, afterGroup.map(t => `${t.url} idx:${t.index}`));
+
+    // Enforce correct tab order within this group (grouping may rearrange tabs)
+    if (tabIds.length > 1) {
+      for (let i = 1; i < tabIds.length; i++) {
+        const prevTab = await chrome.tabs.get(tabIds[i - 1]);
+        console.log(`[restore] move tabId:${tabIds[i]} to index:${prevTab.index + 1} (after tabId:${tabIds[i - 1]} at idx:${prevTab.index})`);
+        await chrome.tabs.move(tabIds[i], { index: prevTab.index + 1 });
+      }
+      // Log final order after move
+      const afterMove = await Promise.all(tabIds.map(id => chrome.tabs.get(id)));
+      console.log(`[restore] after move "${group.title}":`, afterMove.map(t => `${t.url} idx:${t.index}`));
+    }
+  }
+
+  // Enforce correct order for ungrouped tabs
+  const ungroupedCreated = createdTabs.filter(ct => !ct.spec.groupId || !groupOrder.has(ct.spec.groupId));
+  if (ungroupedCreated.length > 1) {
+    for (let i = 1; i < ungroupedCreated.length; i++) {
+      const prevTab = await chrome.tabs.get(ungroupedCreated[i - 1].tabId);
+      await chrome.tabs.move(ungroupedCreated[i].tabId, { index: prevTab.index + 1 });
+    }
   }
 
   // Create marker group (collapsed, with workspace name)
@@ -539,6 +580,14 @@ function syncBadge(status) {
 }
 
 function formatTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  const now = Date.now();
+  const diffSec = Math.floor((now - d.getTime()) / 1000);
+  if (diffSec < 0) return formatDateTimeShort(iso, _currentTz);
+  if (diffSec < 60) return `${diffSec}${t('secondsAgo')}`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 10) return `${diffMin}${t('minutesAgo')}`;
   return formatDateTimeShort(iso, _currentTz);
 }
 
@@ -770,7 +819,7 @@ function triggerAutoSync() {
   // Fire-and-forget: sync in background after local operations
   isSyncConfigured().then(configured => {
     if (configured) {
-      performSync().then(result => {
+      detectWorkspaceWindows().then(wins => performSync(wins)).then(result => {
         if (!result.error) renderList();
       }).catch(() => {});
     }
@@ -811,7 +860,10 @@ async function doSync() {
   syncStatus.innerHTML = `<span class="sync-spinner"></span> ${t('syncing')}`;
   syncStatus.className = 'sync-status';
 
-  const result = await performSync();
+  const openWindows = await detectWorkspaceWindows();
+  console.log('[Tabsy] Manual sync: detected workspace windows:', openWindows);
+  const result = await performSync(openWindows);
+  console.log('[Tabsy] Manual sync result:', result);
 
   if (result.error) {
     syncStatus.textContent = result.error;
