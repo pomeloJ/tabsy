@@ -9,7 +9,7 @@
  *   const result = await runner.run();
  */
 
-import { interpolate } from './flow-schema.js';
+import { interpolate, isDangerousBlock, hasDangerousBlocks } from './flow-schema.js';
 import * as executor from './flow-executor.js';
 
 // --- 執行狀態 ---
@@ -170,6 +170,14 @@ export class FlowRunner {
     const tab = this.tabId;
     const v = this.variables;
     const $ = (s) => interpolate(s, v); // 變數插值捷徑
+
+    // Trust check: block dangerous blocks in untrusted flows
+    if (!this.flow.codeTrusted && isDangerousBlock(block)) {
+      throw new Error(
+        `Blocked: "${block.type}" requires code trust approval. ` +
+        `This flow contains executable code and must be trusted before running.`
+      );
+    }
 
     switch (block.type) {
       // === 動作 ===

@@ -1,3 +1,10 @@
+// --- Server-aligned clock ---
+// Injected by api-client.js to avoid circular dependency.
+// Falls back to local clock if not yet calibrated.
+let _serverNowFn = () => new Date().toISOString();
+export function setServerNowFn(fn) { _serverNowFn = fn; }
+function serverNow() { return _serverNowFn(); }
+
 // 10-color system (shared with server/Web UI)
 export const COLORS = [
   { name: '藍', hex: '#0078d4', chrome: 'blue' },
@@ -147,7 +154,7 @@ export async function getConflicts() {
 // --- Sync Settings ---
 
 export async function getSettings() {
-  const { syncSettings = { serverUrl: '', token: '' } } = await chrome.storage.local.get('syncSettings');
+  const { syncSettings = { serverUrl: '', token: '', cfAccessClientId: '', cfAccessClientSecret: '' } } = await chrome.storage.local.get('syncSettings');
   return syncSettings;
 }
 
@@ -188,7 +195,7 @@ export async function saveFlow(workspaceId, flow) {
   } else {
     ws.flows.push(flow);
   }
-  ws.savedAt = new Date().toISOString();
+  ws.savedAt = serverNow();
   if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
   await save(ws);
   return flow;
@@ -198,9 +205,77 @@ export async function removeFlow(workspaceId, flowId) {
   const ws = await getById(workspaceId);
   if (!ws || !ws.flows) return;
   ws.flows = ws.flows.filter(f => f.id !== flowId);
-  ws.savedAt = new Date().toISOString();
+  ws.savedAt = serverNow();
   if (ws.syncStatus === 'synced') ws.syncStatus = 'pending';
   await save(ws);
+}
+
+// --- Client ID (persistent browser instance identifier) ---
+
+export async function getClientId() {
+  let { clientId } = await chrome.storage.local.get('clientId');
+  if (!clientId) {
+    clientId = crypto.randomUUID();
+    await chrome.storage.local.set({ clientId });
+  }
+  return clientId;
+}
+
+// --- Timezone setting (auto-detect from browser, allow override) ---
+
+const _detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+export async function getTimezone() {
+  const { tabsyTimezone } = await chrome.storage.local.get('tabsyTimezone');
+  return tabsyTimezone || _detectedTimezone;
+}
+
+export async function setTimezone(tz) {
+  await chrome.storage.local.set({ tabsyTimezone: tz || '' });
+}
+
+export function getDetectedTimezone() {
+  return _detectedTimezone;
+}
+
+/**
+ * Format an ISO date string using the saved timezone.
+ * @param {string} iso - ISO 8601 date string
+ * @param {string} tz - IANA timezone (e.g. 'Asia/Taipei')
+ * @param {object} [opts] - extra Intl.DateTimeFormat options
+ * @returns {string}
+ */
+export function formatDateTime(iso, tz, opts = {}) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+    ...opts
+  });
+}
+
+export function formatDateTimeShort(iso, tz) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
+
+export function formatTimeOnly(iso, tz) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  });
 }
 
 // --- Auto-sync setting (default: enabled) ---

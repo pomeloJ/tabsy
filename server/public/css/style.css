@@ -696,6 +696,35 @@ body.guest .main {
 }
 
 /* === Settings === */
+.settings-tabs {
+  display: flex;
+  gap: 0;
+  margin-top: 12px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.settings-tab {
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--color-text);
+}
+
+.settings-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
 .settings-section {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
@@ -774,6 +803,24 @@ body.guest .main {
 
 .token-table tr:last-child td {
   border-bottom: none;
+}
+
+/* Sync action badges */
+.sync-action-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.sync-action-push {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.sync-action-pull {
+  background: #e3f2fd;
+  color: #1565c0;
 }
 
 /* === Workspace Detail === */
@@ -1123,6 +1170,58 @@ body.guest .main {
   opacity: 1;
 }
 
+/* Tab drag handle */
+.ws-tab-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--color-text-tertiary);
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.ws-tab:hover .ws-tab-drag-handle {
+  opacity: 0.5;
+}
+
+.ws-tab-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+}
+
+.ws-tab-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Tab dragging state */
+.ws-tab.dragging {
+  opacity: 0.4;
+  background: var(--color-surface-hover);
+}
+
+/* Drop indicators */
+.ws-tab.drag-over-top {
+  box-shadow: inset 0 2px 0 0 var(--color-primary);
+}
+
+.ws-tab.drag-over-bottom {
+  box-shadow: inset 0 -2px 0 0 var(--color-primary);
+}
+
+/* Empty group drop target */
+.ws-group-tabs.drag-over-empty {
+  background: rgba(0, 120, 212, 0.06);
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+  min-height: 44px;
+}
+
 /* Tab inline edit */
 .ws-tab.editing {
   background: var(--color-surface-hover);
@@ -1184,9 +1283,71 @@ body.guest .main {
   margin-top: 2px;
 }
 
+/* Panel bar (Tabs / Flows toggle) */
+.ws-panel-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 16px;
+}
+
+.ws-panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  font-family: inherit;
+  text-transform: capitalize;
+}
+
+.ws-panel-tab:hover {
+  color: var(--color-text);
+}
+
+.ws-panel-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.ws-panel-badge {
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  line-height: 1.3;
+}
+
+.ws-panel-tab:not(.active) .ws-panel-badge {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.ws-add-top {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
 /* Flows section (read-only) */
+.ws-flows-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+}
+
 .ws-flows-section {
-  margin-top: 24px;
+  margin-top: 0;
 }
 .ws-flows-header {
   display: flex;
@@ -1690,4 +1851,51 @@ body.guest .main {
   color: var(--color-text-secondary);
   font-size: 0.875rem;
   line-height: 1.7;
+}
+
+/* === Backup === */
+
+.backup-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.backup-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.backup-toggle-status {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.backup-settings-row {
+  padding: 10px 0;
+}
+
+.backup-decrypt-box {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.backup-import-preview {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.import-ws-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.import-ws-item:last-child {
+  border-bottom: none;
 }

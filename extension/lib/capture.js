@@ -1,4 +1,5 @@
 import { generateId, getAll, getById } from './storage.js';
+import { serverNow } from './api-client.js';
 
 const MARKER_BASE = chrome.runtime.getURL('marker.html');
 function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
@@ -62,7 +63,7 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     id: existingId || generateId(),
     name,
     color,
-    savedAt: new Date().toISOString(),
+    savedAt: serverNow(),
     groups,
     tabs: workspaceTabs,
     flows: existingFlows,

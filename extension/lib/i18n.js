@@ -43,6 +43,8 @@ const locales = {
     deleteConfirm: 'Delete "{name}"?',
     deleteFlowConfirm: 'Delete this flow?',
     restore: 'Restore',
+    secondsAgo: 's ago',
+    minutesAgo: 'm ago',
     // Sync status badges
     syncedBadge: '&#x2713; Synced',
     localBadge: '&#x25cf; Local',
@@ -173,6 +175,13 @@ const locales = {
     'cat.logic': 'Logic',
     'cat.output': 'Output',
     'cat.custom': 'Custom',
+    // --- Security ---
+    'security.untrustedFlow': 'This flow contains executable code and is not yet trusted.',
+    'security.trustFlow': 'Trust & Allow Code Execution',
+    'security.revokeFlow': 'Revoke Code Trust',
+    'security.codeTrusted': 'Code execution trusted',
+    'security.codeUntrusted': 'Code execution blocked',
+    'security.dangerousAutoTrigger': 'Warning: Auto-triggered flow contains executable code blocks. Code blocks will be skipped unless trusted.',
     // --- Marker page ---
     tabs: 'Tabs',
     groups: 'Groups',
@@ -183,8 +192,17 @@ const locales = {
     saved: 'Saved',
     opened: 'Opened',
     markerHint: 'This tab is a Tabsy workspace marker — do not close',
-    // Language
+    // Browser ID
+    browserId: 'Browser ID',
+    copy: 'Copy',
+    copied: 'Copied!',
+    // Cloudflare Access
+    cfAccessTitle: 'Cloudflare Access (Optional)',
+    cfAccessClientId: 'CF-Access-Client-Id',
+    cfAccessClientSecret: 'CF-Access-Client-Secret',
+    // Language & Timezone
     language: 'Language',
+    timezone: 'Timezone',
   },
 
   'zh-TW': {
@@ -221,6 +239,8 @@ const locales = {
     deleteConfirm: '刪除「{name}」？',
     deleteFlowConfirm: '刪除此流程？',
     restore: '還原',
+    secondsAgo: ' 秒前',
+    minutesAgo: ' 分鐘前',
     syncedBadge: '&#x2713; 已同步',
     localBadge: '&#x25cf; 本地',
     pendingBadge: '&#x21bb; 待同步',
@@ -340,6 +360,12 @@ const locales = {
     'cat.logic': '邏輯',
     'cat.output': '輸出',
     'cat.custom': '自訂',
+    'security.untrustedFlow': '此 Flow 包含可執行程式碼，尚未取得信任核可。',
+    'security.trustFlow': '信任並允許執行程式碼',
+    'security.revokeFlow': '撤銷程式碼信任',
+    'security.codeTrusted': '程式碼執行已核可',
+    'security.codeUntrusted': '程式碼執行已阻擋',
+    'security.dangerousAutoTrigger': '警告：自動觸發的 Flow 包含可執行程式碼區塊。未核可前，程式碼區塊將被跳過。',
     tabs: '分頁',
     groups: '群組',
     pinned: '釘選',
@@ -349,7 +375,17 @@ const locales = {
     saved: '儲存',
     opened: '開啟',
     markerHint: '此分頁為 Tabsy workspace 標記 — 請勿關閉',
+    // Browser ID
+    browserId: '瀏覽器 ID',
+    copy: '複製',
+    copied: '已複製！',
+    // Cloudflare Access
+    cfAccessTitle: 'Cloudflare Access（選用）',
+    cfAccessClientId: 'CF-Access-Client-Id',
+    cfAccessClientSecret: 'CF-Access-Client-Secret',
+    // Language & Timezone
     language: '語言',
+    timezone: '時區',
   }
 };
 

@@ -43,7 +43,9 @@ function applyLabels() {
 const params = new URLSearchParams(location.search);
 const wsId = params.get('id') || '';
 const wsName = params.get('name') || 'Workspace';
-const wsColor = params.get('color') || '#0078d4';
+const rawColor = params.get('color') || '#0078d4';
+// Validate color is a safe hex value to prevent CSS injection
+const wsColor = /^#[0-9a-fA-F]{3,6}$/.test(rawColor) ? rawColor : '#0078d4';
 const openedAt = new Date();
 
 // Apply basic info from URL params immediately
@@ -51,8 +53,14 @@ document.getElementById('name').textContent = wsName;
 document.documentElement.style.setProperty('--color', wsColor);
 document.title = '\u{1F4C2} ' + wsName + ' \u2014 Tabsy';
 
+var _markerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+chrome.storage.local.get('tabsyTimezone').then(function(r) {
+  if (r.tabsyTimezone) _markerTz = r.tabsyTimezone;
+});
+
 function formatTime(date) {
   return date.toLocaleString(undefined, {
+    timeZone: _markerTz,
     month: 'numeric', day: 'numeric',
     hour: '2-digit', minute: '2-digit', second: '2-digit'
   });
@@ -82,7 +90,8 @@ function renderGroups(tabs, groups) {
 
   groups.forEach(function(g) {
     var count = tabs.filter(function(t) { return t.groupId === g.groupId; }).length;
-    var colorHex = CHROME_COLOR_HEX[g.color] || '#9aa0a6';
+    var lookedUp = CHROME_COLOR_HEX[g.color];
+    var colorHex = (lookedUp && /^#[0-9a-fA-F]{6}$/.test(lookedUp)) ? lookedUp : '#9aa0a6';
     var row = document.createElement('div');
     row.className = 'group-row';
     row.innerHTML =

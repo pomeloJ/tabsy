@@ -310,6 +310,14 @@
       gap: 8px;
     }
     .sync-bar .btn { flex: none; }
+    .clock-offset {
+      font-size: 9px;
+      color: var(--text-sec);
+      opacity: 0.5;
+      margin-left: auto;
+      cursor: default;
+      font-variant-numeric: tabular-nums;
+    }
     .sync-status {
       font-size: 11px;
       color: var(--text-sec);
@@ -672,6 +680,48 @@
     .block-card[data-category="logic"] { border-left-color: var(--cat-logic); }
     .block-card[data-category="output"] { border-left-color: var(--cat-output); }
     .block-card[data-category="custom"] { border-left-color: var(--cat-custom); }
+    .block-card.dangerous-block { border-left-color: #d13438; }
+    .block-card.dangerous-block .block-label::after {
+      content: '\26A0';
+      margin-left: 4px;
+      color: #d13438;
+      font-size: 12px;
+    }
+
+    /* Trust banner */
+    .trust-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .trust-banner.untrusted {
+      background: #fff4e5;
+      border: 1px solid #ffb900;
+      color: #6b5900;
+    }
+    .trust-banner.trusted {
+      background: #e6f4e6;
+      border: 1px solid #107c10;
+      color: #0b5a0b;
+    }
+    .trust-toggle-btn {
+      flex-shrink: 0;
+      padding: 5px 12px;
+      border-radius: 4px;
+      border: 1px solid currentColor;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .trust-toggle-btn:hover { opacity: 0.8; }
 
     .block-header {
       display: flex;
@@ -1193,6 +1243,7 @@
         <input type="checkbox" id="auto-sync-checkbox" checked>
         <span data-i18n="auto">Auto</span>
       </label>
+      <span class="clock-offset" id="clock-offset" title=""></span>
     </div>
 
     <!-- Conflict banner -->
@@ -1225,10 +1276,25 @@
       <span class="arrow" id="settings-arrow">&#9654;</span>
     </div>
     <div class="settings-panel" id="settings-panel">
+      <label data-i18n="browserId">Browser ID</label>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <input type="text" id="client-id" readonly style="flex:1;background:#f0f0f0;cursor:default;font-family:monospace;font-size:11px;margin-bottom:0">
+        <button class="btn btn-secondary btn-sm" id="copy-client-id-btn" data-i18n="copy" style="flex:none">Copy</button>
+      </div>
       <label for="server-url" data-i18n="serverUrl">Server URL</label>
       <input type="url" id="server-url" placeholder="http://localhost:3000">
       <label for="sync-token" data-i18n="syncToken">Sync Token</label>
       <input type="text" id="sync-token" placeholder="tb_xxxxxxxxxxxx">
+      <div class="cf-access-toggle" id="cf-access-toggle" style="display:flex;align-items:center;gap:6px;margin:8px 0 4px;cursor:pointer;font-size:12px;color:var(--text-secondary)">
+        <span class="arrow" id="cf-access-arrow" style="font-size:10px;transition:transform .2s">&#9654;</span>
+        <span data-i18n="cfAccessTitle">Cloudflare Access (Optional)</span>
+      </div>
+      <div id="cf-access-panel" style="display:none">
+        <label for="cf-client-id" data-i18n="cfAccessClientId">CF-Access-Client-Id</label>
+        <input type="text" id="cf-client-id" placeholder="">
+        <label for="cf-client-secret" data-i18n="cfAccessClientSecret">CF-Access-Client-Secret</label>
+        <input type="password" id="cf-client-secret" placeholder="">
+      </div>
       <div class="settings-status" id="settings-status"></div>
       <div class="btn-row">
         <button class="btn btn-primary btn-sm" id="save-settings-btn" data-i18n="save">Save</button>
@@ -1242,6 +1308,13 @@
       <select id="lang-select" style="border:1px solid var(--border);border-radius:4px;font-size:12px;padding:2px 6px;background:var(--surface);cursor:pointer" onclick="event.stopPropagation()">
         <option value="en">English</option>
         <option value="zh-TW">繁體中文</option>
+      </select>
+    </div>
+
+    <!-- Timezone -->
+    <div class="settings-toggle" id="tz-toggle">
+      <span data-i18n="timezone">Timezone</span>
+      <select id="tz-select" style="border:1px solid var(--border);border-radius:4px;font-size:11px;padding:2px 6px;background:var(--surface);cursor:pointer;max-width:180px" onclick="event.stopPropagation()">
       </select>
     </div>
 

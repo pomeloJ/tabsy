@@ -11,6 +11,8 @@ const locales = {
     // Nav & layout
     workspaces: 'Workspaces',
     settings: 'Settings',
+    personalSettings: 'Personal',
+    adminSettings: 'Administration',
     logout: 'Logout',
     workspace: 'Workspace',
     closeMenu: 'Close menu',
@@ -167,8 +169,22 @@ const locales = {
     noOtherUsers: 'No other users yet.',
     you: '(you)',
 
-    // Language
+    // Language & Timezone
     language: 'Language',
+    timezone: 'Timezone',
+
+    // Sync logs
+    syncLogs: 'Sync History',
+    syncLogsDesc: 'Recent sync activity from your browser extensions.',
+    syncLogAction: 'Action',
+    syncLogClientId: 'Browser ID',
+    syncLogWorkspaces: 'Workspaces',
+    syncLogTime: 'Time',
+    syncLogPull: 'Pull',
+    syncLogPush: 'Push',
+    noSyncLogs: 'No sync history yet.',
+    failedToLoadSyncLogs: 'Failed to load sync logs.',
+    lastSyncedBy: 'Last synced by',
 
     // Download page
     download: 'Download',
@@ -186,11 +202,101 @@ const locales = {
     installStep4Title: 'Load the extension',
     installStep4Desc: 'Click "Load unpacked" and select the extracted folder. If updating, click the reload button on the existing extension card instead.',
     versionHistory: 'Version History',
+
+    // Backup & Restore
+    backupRestore: 'Backup & Restore',
+    autoBackup: 'Auto Backup',
+    backupEnabled: 'Enabled',
+    backupDisabled: 'Disabled',
+    backupTime: 'Backup Time',
+    retentionDays: 'Retention Days',
+    days: 'days',
+    saveSettings: 'Save',
+    settingsSaved: 'Settings saved',
+    failedToSaveSettings: 'Failed to save settings.',
+    backupNow: 'Backup Now',
+    creatingBackup: 'Creating...',
+    backupCreated: 'Backup created successfully.',
+    failedToCreateBackup: 'Failed to create backup.',
+    backupHistory: 'Backup History',
+    noBackupsYet: 'No backups yet.',
+    backupType: 'Type',
+    backupTypeAuto: 'Auto',
+    backupTypeManual: 'Manual',
+    backupWorkspaces: 'Workspaces',
+    backupUsers: 'Users',
+    backupSize: 'Size',
+    backupTime2: 'Time',
+    backupNote: 'Note',
+    downloadBackup: 'Download',
+    restoreBackup: 'Restore',
+    deleteBackup: 'Delete',
+    deleteBackupConfirm: 'Delete this backup?',
+    failedToDeleteBackup: 'Failed to delete backup.',
+    failedToLoadBackups: 'Failed to load backups.',
+    failedToLoadBackupSettings: 'Failed to load backup settings.',
+
+    // Export with encryption
+    exportBackup: 'Export Backup',
+    exportDesc: 'Export your workspaces as a portable file. Can be imported by any user on any server.',
+    encryptWithPassword: 'Encrypt with password',
+    encryptPassword: 'Password',
+    encryptPasswordConfirm: 'Confirm password',
+    passwordMismatch: 'Passwords do not match.',
+    passwordTooShort: 'Password must be at least 4 characters.',
+    passwordWarning: 'Password cannot be recovered. Keep it safe.',
+    encryptionRequiresHttps: 'Encryption requires a secure connection (HTTPS). Please access via HTTPS or localhost.',
+    exporting: 'Exporting...',
+    exportSuccess: 'Export complete.',
+
+    // Import
+    importBackup: 'Import Backup',
+    importDesc: 'Import workspaces from a backup file (.json or encrypted .tabsy). Works across users and servers.',
+    selectFile: 'Select backup file...',
+    importFileAccept: '.json,.tabsy',
+    encryptedFileDetected: 'This backup is encrypted.',
+    enterDecryptPassword: 'Enter password to decrypt:',
+    decryptPassword: 'Password',
+    decrypt: 'Decrypt',
+    decrypting: 'Decrypting...',
+    decryptFailed: 'Decryption failed. Wrong password?',
+    importPreview: 'Import Preview',
+    importSource: 'Source',
+    importCreatedAt: 'Created',
+    importWorkspaceCount: '{n} workspace(s)',
+    selectAll: 'Select All',
+    deselectAll: 'Deselect All',
+    conflictHandling: 'If workspace already exists:',
+    conflictSkip: 'Skip existing',
+    conflictOverwrite: 'Overwrite existing',
+    conflictDuplicate: 'Keep both (create copy)',
+    importSelected: 'Import Selected',
+    importing: 'Importing...',
+    importResult: 'Imported {imported}, skipped {skipped}.',
+    noWorkspacesSelected: 'No workspaces selected.',
+    failedToImport: 'Failed to import.',
+
+    // Restore modal
+    restorePreview: 'Restore Preview',
+    restoreMode: 'Restore mode:',
+    restoreMerge: 'Merge (keep existing, add missing)',
+    restoreOverwrite: 'Overwrite (reset to backup state)',
+    restoreWarning: 'A safety backup will be created before restoring.',
+    confirmRestore: 'Confirm Restore',
+    restoring: 'Restoring...',
+    restoreResult: 'Restored {imported}, skipped {skipped}.',
+    failedToRestore: 'Failed to restore.',
+
+    // Admin: all users backups
+    allUsersBackups: 'All Users\' Backups',
+    allUsersBackupsDesc: 'View and manage backups for all users.',
   },
 
   'zh-TW': {
     workspaces: '工作區',
     settings: '設定',
+    personalSettings: '個人設定',
+    adminSettings: '管理區域',
     logout: '登出',
     workspace: '工作區',
     closeMenu: '關閉選單',
@@ -338,6 +444,20 @@ const locales = {
     you: '（你）',
 
     language: '語言',
+    timezone: '時區',
+
+    // Sync logs
+    syncLogs: '同步紀錄',
+    syncLogsDesc: '來自瀏覽器擴充功能的近期同步活動。',
+    syncLogAction: '動作',
+    syncLogClientId: '瀏覽器 ID',
+    syncLogWorkspaces: '工作區',
+    syncLogTime: '時間',
+    syncLogPull: '拉取',
+    syncLogPush: '推送',
+    noSyncLogs: '尚無同步紀錄。',
+    failedToLoadSyncLogs: '載入同���紀錄失敗。',
+    lastSyncedBy: '最後同步自',
 
     // Download page
     download: '下載',
@@ -355,6 +475,94 @@ const locales = {
     installStep4Title: '載入擴充功能',
     installStep4Desc: '點擊「載入未封裝」並選取解壓縮的資料夾。若為更新，請改按現有擴充功能卡片上的重新載入按鈕。',
     versionHistory: '版本紀錄',
+
+    // Backup & Restore
+    backupRestore: '備份與還原',
+    autoBackup: '自動備份',
+    backupEnabled: '已啟用',
+    backupDisabled: '已停用',
+    backupTime: '備份時間',
+    retentionDays: '保留天數',
+    days: '天',
+    saveSettings: '儲存',
+    settingsSaved: '設定已儲存',
+    failedToSaveSettings: '儲存設定失敗。',
+    backupNow: '立即備份',
+    creatingBackup: '建立中...',
+    backupCreated: '備份已成功建立。',
+    failedToCreateBackup: '建立備份失敗。',
+    backupHistory: '備份記錄',
+    noBackupsYet: '尚無備份。',
+    backupType: '類型',
+    backupTypeAuto: '自動',
+    backupTypeManual: '手動',
+    backupWorkspaces: '工作區',
+    backupUsers: '使用者',
+    backupSize: '大小',
+    backupTime2: '時間',
+    backupNote: '備註',
+    downloadBackup: '下載',
+    restoreBackup: '還原',
+    deleteBackup: '刪除',
+    deleteBackupConfirm: '刪除此備份？',
+    failedToDeleteBackup: '刪除備份失敗。',
+    failedToLoadBackups: '載入備份失敗。',
+    failedToLoadBackupSettings: '載入備份設定失敗。',
+
+    // Export with encryption
+    exportBackup: '匯出備份',
+    exportDesc: '將您的工作區匯出為可攜式檔案。可由任何伺服器上的任何使用者匯入。',
+    encryptWithPassword: '使用密碼加密',
+    encryptPassword: '密碼',
+    encryptPasswordConfirm: '確認密碼',
+    passwordMismatch: '兩次密碼不一致。',
+    passwordTooShort: '密碼至少需要 4 個字元。',
+    passwordWarning: '密碼無法找回，請妥善保管。',
+    encryptionRequiresHttps: '加密功能需要安全連線（HTTPS）。請透過 HTTPS 或 localhost 存取。',
+    exporting: '匯出中...',
+    exportSuccess: '匯出完成。',
+
+    // Import
+    importBackup: '匯入備份',
+    importDesc: '從備份檔匯入工作區（.json 或加密的 .tabsy）。支援跨使用者與跨伺服器。',
+    selectFile: '選擇備份檔...',
+    importFileAccept: '.json,.tabsy',
+    encryptedFileDetected: '此備份已加密。',
+    enterDecryptPassword: '請輸入密碼以解密：',
+    decryptPassword: '密碼',
+    decrypt: '解密',
+    decrypting: '解密中...',
+    decryptFailed: '解密失敗，密碼錯誤？',
+    importPreview: '匯入預覽',
+    importSource: '來源',
+    importCreatedAt: '建立時間',
+    importWorkspaceCount: '{n} 個工作區',
+    selectAll: '全選',
+    deselectAll: '取消全選',
+    conflictHandling: '工作區已存在時：',
+    conflictSkip: '跳過已存在的',
+    conflictOverwrite: '覆寫已存在的',
+    conflictDuplicate: '兩者都保留（建立副本）',
+    importSelected: '匯入選取的工作區',
+    importing: '匯入中...',
+    importResult: '已匯入 {imported} 個，跳過 {skipped} 個。',
+    noWorkspacesSelected: '未選取任何工作區。',
+    failedToImport: '匯入失敗。',
+
+    // Restore modal
+    restorePreview: '還原預覽',
+    restoreMode: '還原模式：',
+    restoreMerge: '合併（保留現有，補回缺少的）',
+    restoreOverwrite: '覆寫（完全恢復到備份狀態）',
+    restoreWarning: '還原前將自動建立安全備份。',
+    confirmRestore: '確認還原',
+    restoring: '還原中...',
+    restoreResult: '已還原 {imported} 個，跳過 {skipped} 個。',
+    failedToRestore: '還原失敗。',
+
+    // Admin: all users backups
+    allUsersBackups: '所有使用者的備份',
+    allUsersBackupsDesc: '檢視及管理所有使用者的備份。',
   }
 };
 
@@ -398,5 +606,68 @@ export function getAvailableLocales() {
   ];
 }
 
+// --- Timezone ---
+
+const _detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let _timezone = _detectedTimezone;
+
+export function getTimezone() {
+  return _timezone;
+}
+
+export function setTimezone(tz) {
+  if (tz) {
+    _timezone = tz;
+    localStorage.setItem('tabsyTimezone', tz);
+  } else {
+    _timezone = _detectedTimezone;
+    localStorage.removeItem('tabsyTimezone');
+  }
+}
+
+export function getDetectedTimezone() {
+  return _detectedTimezone;
+}
+
+export function initTimezone() {
+  const saved = localStorage.getItem('tabsyTimezone');
+  _timezone = saved || _detectedTimezone;
+}
+
+export function getTimezoneList() {
+  try {
+    return Intl.supportedValuesOf('timeZone');
+  } catch {
+    return [_detectedTimezone];
+  }
+}
+
+/**
+ * Format an ISO date string using the current timezone setting.
+ */
+export function formatDateTime(iso, opts = {}) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: _timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+    ...opts
+  });
+}
+
+export function formatDateTimeShort(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return iso || '';
+  return d.toLocaleString(undefined, {
+    timeZone: _timezone,
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
+
 // Initialize on load
 initLocale();
+initTimezone();

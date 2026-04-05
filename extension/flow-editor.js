@@ -3,10 +3,14 @@
  */
 
 import { BLOCK_TYPES, BLOCK_CATEGORIES, CONDITION_TYPES, TRIGGER_TYPES,
-         createFlow, createBlock, interpolate } from './lib/flow-schema.js';
-import { getFlows, saveFlow, getFlowById } from './lib/storage.js';
+         createFlow, createBlock, interpolate, hasDangerousBlocks, isDangerousBlock } from './lib/flow-schema.js';
+import { getFlows, saveFlow, getFlowById, getTimezone } from './lib/storage.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { t, initLocale } from './lib/i18n.js';
+
+// --- Timezone ---
+let _editorTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+getTimezone().then(tz => { _editorTz = tz; });
 
 // --- State ---
 let flow = null;
@@ -207,6 +211,34 @@ function readFlowFromUI() {
 
 function renderCanvas() {
   canvas.innerHTML = '';
+
+  // Trust banner for flows with dangerous blocks
+  if (hasDangerousBlocks(flow)) {
+    const banner = document.createElement('div');
+    banner.className = 'trust-banner ' + (flow.codeTrusted ? 'trusted' : 'untrusted');
+    const msg = document.createElement('span');
+    msg.textContent = flow.codeTrusted ? t('security.codeTrusted') : t('security.untrustedFlow');
+    const btn = document.createElement('button');
+    btn.className = 'trust-toggle-btn';
+    btn.textContent = flow.codeTrusted ? t('security.revokeFlow') : t('security.trustFlow');
+    btn.addEventListener('click', () => {
+      flow.codeTrusted = !flow.codeTrusted;
+      renderCanvas();
+    });
+    banner.appendChild(msg);
+    banner.appendChild(btn);
+    canvas.appendChild(banner);
+
+    // Layer 3: Warning for auto-trigger + dangerous blocks
+    if (flow.trigger !== 'manual') {
+      const warn = document.createElement('div');
+      warn.className = 'trust-banner untrusted';
+      warn.style.fontSize = '12px';
+      warn.textContent = t('security.dangerousAutoTrigger');
+      canvas.appendChild(warn);
+    }
+  }
+
   renderBlockList(flow.blocks, canvas, null);
 
   // Final add button
@@ -239,6 +271,7 @@ function renderBlockCard(block, parentBlocks, index, path) {
   card.dataset.category = def.category;
   card.dataset.path = path;
   if (expandedBlocks.has(path)) card.classList.add('expanded');
+  if (isDangerousBlock(block)) card.classList.add('dangerous-block');
 
   // Drag attributes
   card.draggable = true;
@@ -252,9 +285,9 @@ function renderBlockCard(block, parentBlocks, index, path) {
   const header = document.createElement('div');
   header.className = 'block-header';
   header.innerHTML = `
-    <span class="block-drag-handle" title="${t('dragToReorder')}">&#x2630;</span>
-    <span class="block-label">${def.label}</span>
-    <span class="block-summary">${getBlockSummary(block)}</span>
+    <span class="block-drag-handle" title="${escapeHtml(t('dragToReorder'))}">&#x2630;</span>
+    <span class="block-label">${escapeHtml(def.label)}</span>
+    <span class="block-summary">${escapeHtml(getBlockSummary(block))}</span>
     <div class="block-actions">
       <button class="block-action-btn duplicate" title="${t('duplicate')}">&#x2398;</button>
       <button class="block-action-btn delete" title="${t('delete')}">&times;</button>
@@ -1130,7 +1163,7 @@ function appendLogEntry(entry, type = 'info') {
 
   const div = document.createElement('div');
   div.className = 'log-entry';
-  const time = new Date(entry.time).toLocaleTimeString();
+  const time = new Date(entry.time).toLocaleTimeString(undefined, { timeZone: _editorTz });
   const icon = type === 'error' ? '&#10007;' : type === 'warn' ? '&#9888;' : '&#9679;';
   div.innerHTML = `
     <span class="log-time">${time}</span>
@@ -1290,8 +1323,12 @@ function attachEvents() {
   tlCountBadge = document.getElementById('tl-count');
   panelsClose = document.getElementById('panels-close');
 
-  // Trigger change → toggle URL Match row
-  flowTrigger.addEventListener('change', updateMatchRowVisibility);
+  // Trigger change → toggle URL Match row + re-render canvas for auto-trigger warning
+  flowTrigger.addEventListener('change', () => {
+    flow.trigger = flowTrigger.value;
+    updateMatchRowVisibility();
+    renderCanvas();
+  });
 
   // URL Match → live validation against active tab
   flowMatch.addEventListener('input', updateMatchHint);
@@ -1318,6 +1355,11 @@ function attachEvents() {
   // Save
   saveBtn.addEventListener('click', async () => {
     readFlowFromUI();
+    // Locally-edited flows: auto-trust if user has dangerous blocks
+    // (user is explicitly saving their own code)
+    if (hasDangerousBlocks(flow) && flow.codeTrusted === undefined) {
+      flow.codeTrusted = true;
+    }
     if (workspaceId) {
       await saveFlow(workspaceId, flow);
       saveBtn.textContent = 'Saved!';

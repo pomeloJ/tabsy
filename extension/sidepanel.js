@@ -3,10 +3,14 @@ import {
   getAll, getById, save, remove, clearAll,
   getSettings, saveSettings, getConflicts,
   getAutoSync, setAutoSync,
-  getFlows, getFlowById, saveFlow, removeFlow
+  getFlows, getFlowById, saveFlow, removeFlow,
+  getClientId,
+  getTimezone, setTimezone, getDetectedTimezone,
+  formatDateTimeShort
 } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
-import { captureWindow } from './lib/capture.js';
+import { serverNow, getClockOffset } from './lib/api-client.js';
+import { captureWindow, detectWorkspaceWindows } from './lib/capture.js';
 import { threeWayMerge } from './lib/merge.js';
 import { FlowRunner, RunState } from './lib/flow-runner.js';
 import { createFlow, createBlock, BLOCK_TYPES, BLOCK_CATEGORIES, TRIGGER_TYPES } from './lib/flow-schema.js';
@@ -154,11 +158,23 @@ async function restoreWorkspace(workspace) {
     index: 0
   });
 
-  // Create all tabs
+  // Create all tabs — order: pinned, then grouped (by group order), then ungrouped
   const createdTabs = [];
+  const groups = workspace.groups || [];
+  const groupOrder = new Map(groups.map((g, i) => [g.groupId, i]));
+
   const pinnedTabs = workspace.tabs.filter(t => t.pinned);
   const normalTabs = workspace.tabs.filter(t => !t.pinned);
-  const orderedTabs = [...pinnedTabs, ...normalTabs];
+
+  // Separate grouped vs ungrouped, sort grouped tabs so same-group tabs are adjacent
+  const groupedNormal = normalTabs.filter(t => t.groupId && groupOrder.has(t.groupId));
+  const ungroupedNormal = normalTabs.filter(t => !t.groupId || !groupOrder.has(t.groupId));
+  groupedNormal.sort((a, b) => groupOrder.get(a.groupId) - groupOrder.get(b.groupId));
+
+  const orderedTabs = [...pinnedTabs, ...groupedNormal, ...ungroupedNormal];
+
+  console.log('[restore] workspace.tabs order:', workspace.tabs.map(t => `${t.url}(${t.groupId || 'none'})`));
+  console.log('[restore] orderedTabs:', orderedTabs.map(t => `${t.url}(${t.groupId || 'none'})`));
 
   for (const tab of orderedTabs) {
     const created = await chrome.tabs.create({
@@ -170,6 +186,8 @@ async function restoreWorkspace(workspace) {
     createdTabs.push({ spec: tab, tabId: created.id });
   }
 
+  console.log('[restore] createdTabs:', createdTabs.map(ct => `${ct.spec.url} → chromeId:${ct.tabId}`));
+
   // Create tab groups
   const groupMap = {}; // workspace groupId → chrome groupId
   for (const group of workspace.groups) {
@@ -178,6 +196,8 @@ async function restoreWorkspace(workspace) {
       .map(ct => ct.tabId);
     if (tabIds.length === 0) continue;
 
+    console.log(`[restore] grouping "${group.title}" (${group.groupId}): tabIds=`, tabIds);
+
     const chromeGroupId = await chrome.tabs.group({ tabIds, createProperties: { windowId: newWin.id } });
     await chrome.tabGroups.update(chromeGroupId, {
       title: group.title,
@@ -185,6 +205,31 @@ async function restoreWorkspace(workspace) {
       collapsed: group.collapsed
     });
     groupMap[group.groupId] = chromeGroupId;
+
+    // Log tab order after grouping
+    const afterGroup = await Promise.all(tabIds.map(id => chrome.tabs.get(id)));
+    console.log(`[restore] after group "${group.title}":`, afterGroup.map(t => `${t.url} idx:${t.index}`));
+
+    // Enforce correct tab order within this group (grouping may rearrange tabs)
+    if (tabIds.length > 1) {
+      for (let i = 1; i < tabIds.length; i++) {
+        const prevTab = await chrome.tabs.get(tabIds[i - 1]);
+        console.log(`[restore] move tabId:${tabIds[i]} to index:${prevTab.index + 1} (after tabId:${tabIds[i - 1]} at idx:${prevTab.index})`);
+        await chrome.tabs.move(tabIds[i], { index: prevTab.index + 1 });
+      }
+      // Log final order after move
+      const afterMove = await Promise.all(tabIds.map(id => chrome.tabs.get(id)));
+      console.log(`[restore] after move "${group.title}":`, afterMove.map(t => `${t.url} idx:${t.index}`));
+    }
+  }
+
+  // Enforce correct order for ungrouped tabs
+  const ungroupedCreated = createdTabs.filter(ct => !ct.spec.groupId || !groupOrder.has(ct.spec.groupId));
+  if (ungroupedCreated.length > 1) {
+    for (let i = 1; i < ungroupedCreated.length; i++) {
+      const prevTab = await chrome.tabs.get(ungroupedCreated[i - 1].tabId);
+      await chrome.tabs.move(ungroupedCreated[i].tabId, { index: prevTab.index + 1 });
+    }
   }
 
   // Create marker group (collapsed, with workspace name)
@@ -234,7 +279,8 @@ async function detectCurrentWorkspace() {
     const workspaces = await getAll();
     const ws = workspaces.find(w => w.name === wsName);
 
-    currentWsLabel.innerHTML = `<span style="color:${group.color}">📂</span> ${escapeHtml(wsName)}`;
+    const groupColor = /^[a-z]+$/.test(group.color) ? group.color : 'grey';
+    currentWsLabel.innerHTML = `<span style="color:${groupColor}">📂</span> ${escapeHtml(wsName)}`;
 
     if (ws) {
       currentWorkspaceData = { id: ws.id, name: ws.name, color: ws.color };
@@ -370,7 +416,7 @@ let _renderedOrder = []; // ordered workspace ids from last render
 function buildCardHtml(w, wsFlows) {
   return `
       <div class="ws-card-header">
-        <div class="ws-card-dot" style="background:${w.color}"></div>
+        <div class="ws-card-dot" style="background:${safeColor(w.color)}"></div>
         <div class="ws-card-name">${escapeHtml(w.name)}</div>
         ${syncBadge(w.syncStatus)}
       </div>
@@ -512,6 +558,10 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function safeColor(color) {
+  return /^#[0-9a-fA-F]{3,6}$/.test(color) ? color : '#69797e';
+}
+
 function getSyncLabels() {
   return {
     synced: t('syncedBadge'),
@@ -531,9 +581,14 @@ function syncBadge(status) {
 
 function formatTime(iso) {
   const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (isNaN(d)) return iso || '';
+  const now = Date.now();
+  const diffSec = Math.floor((now - d.getTime()) / 1000);
+  if (diffSec < 0) return formatDateTimeShort(iso, _currentTz);
+  if (diffSec < 60) return `${diffSec}${t('secondsAgo')}`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 10) return `${diffMin}${t('minutesAgo')}`;
+  return formatDateTimeShort(iso, _currentTz);
 }
 
 // --- Conflict UI ---
@@ -576,7 +631,7 @@ async function resolveConflict(workspaceId, action) {
     case 'local':
       ws.tabs = cd.localVersion.tabs;
       ws.groups = cd.localVersion.groups;
-      ws.savedAt = new Date().toISOString();
+      ws.savedAt = serverNow();
       ws.syncStatus = 'pending';
       delete ws.conflictData;
       break;
@@ -592,7 +647,7 @@ async function resolveConflict(workspaceId, action) {
       const result = threeWayMerge(base, cd.localVersion, cd.remoteVersion);
       ws.tabs = result.merged.tabs;
       ws.groups = result.merged.groups;
-      ws.savedAt = new Date().toISOString();
+      ws.savedAt = serverNow();
       ws.syncStatus = 'pending';
       ws.syncedSnapshot = { tabs: result.merged.tabs, groups: result.merged.groups };
       delete ws.conflictData;
@@ -653,11 +708,34 @@ otherWsToggle.addEventListener('click', () => {
 const settingsToggle = document.getElementById('settings-toggle');
 const settingsArrow = document.getElementById('settings-arrow');
 const settingsPanel = document.getElementById('settings-panel');
+const clientIdInput = document.getElementById('client-id');
+const copyClientIdBtn = document.getElementById('copy-client-id-btn');
 const serverUrlInput = document.getElementById('server-url');
 const syncTokenInput = document.getElementById('sync-token');
+const cfAccessToggle = document.getElementById('cf-access-toggle');
+const cfAccessArrow = document.getElementById('cf-access-arrow');
+const cfAccessPanel = document.getElementById('cf-access-panel');
+const cfClientIdInput = document.getElementById('cf-client-id');
+const cfClientSecretInput = document.getElementById('cf-client-secret');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const testConnBtn = document.getElementById('test-conn-btn');
 const settingsStatus = document.getElementById('settings-status');
+
+cfAccessToggle.addEventListener('click', () => {
+  const open = cfAccessPanel.style.display === 'none';
+  cfAccessPanel.style.display = open ? 'block' : 'none';
+  cfAccessArrow.style.transform = open ? 'rotate(90deg)' : '';
+});
+
+// Load and display client ID
+getClientId().then(id => { clientIdInput.value = id; });
+copyClientIdBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(clientIdInput.value).then(() => {
+    const orig = copyClientIdBtn.textContent;
+    copyClientIdBtn.textContent = t('copied') || 'Copied';
+    setTimeout(() => { copyClientIdBtn.textContent = orig; }, 1500);
+  });
+});
 
 settingsToggle.addEventListener('click', () => {
   settingsPanel.classList.toggle('open');
@@ -667,7 +745,9 @@ settingsToggle.addEventListener('click', () => {
 saveSettingsBtn.addEventListener('click', async () => {
   const serverUrl = serverUrlInput.value.trim().replace(/\/+$/, '');
   const token = syncTokenInput.value.trim();
-  await saveSettings({ serverUrl, token });
+  const cfAccessClientId = cfClientIdInput.value.trim();
+  const cfAccessClientSecret = cfClientSecretInput.value.trim();
+  await saveSettings({ serverUrl, token, cfAccessClientId, cfAccessClientSecret });
   settingsStatus.textContent = t('settingsSaved');
   settingsStatus.className = 'settings-status ok';
 });
@@ -687,14 +767,23 @@ testConnBtn.addEventListener('click', async () => {
   settingsStatus.className = 'settings-status';
 
   try {
+    // Build CF Access headers if configured
+    const cfId = cfClientIdInput.value.trim();
+    const cfSecret = cfClientSecretInput.value.trim();
+    const cfHeaders = {};
+    if (cfId && cfSecret) {
+      cfHeaders['CF-Access-Client-Id'] = cfId;
+      cfHeaders['CF-Access-Client-Secret'] = cfSecret;
+    }
+
     // Test health endpoint
-    const healthRes = await fetch(`${serverUrl}/api/health`);
+    const healthRes = await fetch(`${serverUrl}/api/health`, { headers: cfHeaders });
     if (!healthRes.ok) throw new Error('Server not reachable');
 
     // Test token auth
     if (token) {
       const meRes = await fetch(`${serverUrl}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}`, ...cfHeaders }
       });
       if (!meRes.ok) throw new Error('Invalid token');
       const me = await meRes.json();
@@ -721,6 +810,8 @@ async function loadSettings() {
   const settings = await getSettings();
   serverUrlInput.value = settings.serverUrl || '';
   syncTokenInput.value = settings.token || '';
+  cfClientIdInput.value = settings.cfAccessClientId || '';
+  cfClientSecretInput.value = settings.cfAccessClientSecret || '';
 }
 
 // --- Auto-sync helper ---
@@ -728,7 +819,7 @@ function triggerAutoSync() {
   // Fire-and-forget: sync in background after local operations
   isSyncConfigured().then(configured => {
     if (configured) {
-      performSync().then(result => {
+      detectWorkspaceWindows().then(wins => performSync(wins)).then(result => {
         if (!result.error) renderList();
       }).catch(() => {});
     }
@@ -739,6 +830,25 @@ function triggerAutoSync() {
 const syncBar = document.getElementById('sync-bar');
 const syncBtn = document.getElementById('sync-btn');
 const syncStatus = document.getElementById('sync-status');
+const clockOffsetEl = document.getElementById('clock-offset');
+
+function updateClockOffsetDisplay() {
+  const { offset, calibrated } = getClockOffset();
+  if (!calibrated) {
+    clockOffsetEl.textContent = '';
+    clockOffsetEl.title = '';
+    return;
+  }
+  const sec = (offset / 1000).toFixed(1);
+  const sign = offset >= 0 ? '+' : '';
+  clockOffsetEl.textContent = `${sign}${sec}s`;
+  clockOffsetEl.title = `Clock offset: client ${offset >= 0 ? 'behind' : 'ahead of'} server by ${Math.abs(sec)}s`;
+  // Color hint: green if <1s, yellow if 1-5s, red if >5s
+  const abs = Math.abs(offset);
+  if (abs < 1000) clockOffsetEl.style.color = '';
+  else if (abs < 5000) clockOffsetEl.style.color = 'var(--ws-orange, #ca5010)';
+  else clockOffsetEl.style.color = 'var(--ws-red, #d13438)';
+}
 
 async function updateSyncBar() {
   const configured = await isSyncConfigured();
@@ -750,7 +860,10 @@ async function doSync() {
   syncStatus.innerHTML = `<span class="sync-spinner"></span> ${t('syncing')}`;
   syncStatus.className = 'sync-status';
 
-  const result = await performSync();
+  const openWindows = await detectWorkspaceWindows();
+  console.log('[Tabsy] Manual sync: detected workspace windows:', openWindows);
+  const result = await performSync(openWindows);
+  console.log('[Tabsy] Manual sync result:', result);
 
   if (result.error) {
     syncStatus.textContent = result.error;
@@ -766,6 +879,7 @@ async function doSync() {
     renderConflictBanner();
   }
 
+  updateClockOffsetDisplay();
   syncBtn.disabled = false;
 }
 
@@ -815,7 +929,7 @@ function showFlowLog(flowName) {
 function appendFlowLog(entry) {
   const div = document.createElement('div');
   div.className = 'flow-log-entry';
-  const time = new Date(entry.time).toLocaleTimeString();
+  const time = new Date(entry.time).toLocaleTimeString(undefined, { timeZone: _currentTz });
   div.innerHTML = `<span class="flow-log-time">${time}</span> <span class="flow-log-msg">${escapeHtml(entry.message)}</span>`;
   flowLogBody.appendChild(div);
   flowLogBody.scrollTop = flowLogBody.scrollHeight;
@@ -982,9 +1096,46 @@ langSelect.addEventListener('change', async () => {
   renderConflictBanner();
 });
 
+// --- Timezone selector ---
+const tzSelect = document.getElementById('tz-select');
+let _currentTz = getDetectedTimezone();
+
+async function initTimezone() {
+  _currentTz = await getTimezone();
+  // Populate timezone options
+  const detected = getDetectedTimezone();
+  let zones;
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    // Fallback for older browsers
+    zones = [detected];
+  }
+  // Add auto-detect option at top
+  const autoLabel = `Auto (${detected})`;
+  tzSelect.innerHTML = `<option value="">${autoLabel}</option>` +
+    zones.map(z => `<option value="${z}" ${z === _currentTz && _currentTz !== detected ? 'selected' : ''}>${z}</option>`).join('');
+
+  // If user has a saved timezone, select it; otherwise keep "Auto"
+  const saved = (await chrome.storage.local.get('tabsyTimezone')).tabsyTimezone;
+  if (saved) {
+    tzSelect.value = saved;
+  } else {
+    tzSelect.value = '';
+  }
+}
+
+tzSelect.addEventListener('change', async () => {
+  await setTimezone(tzSelect.value);
+  _currentTz = tzSelect.value || getDetectedTimezone();
+  await detectCurrentWorkspace();
+  await renderList();
+});
+
 // --- Init (progressive: show content fast, defer heavy work) ---
 await initLocale();
 langSelect.value = getLocale();
+await initTimezone();
 applyI18n();
 initColorPicker();
 

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { t } from '../i18n.js';
+import { t, formatDateTimeShort } from '../i18n.js';
 
 const GROUP_COLORS = {
   blue: '#1a73e8',
@@ -100,6 +100,7 @@ export async function render(container) {
           <span>${w.groupCount} ${w.groupCount !== 1 ? t('groups') : t('group')}</span>
           ${w.flowCount > 0 ? `<span>${w.flowCount} ${w.flowCount !== 1 ? t('flowsPlural') : t('flow')}</span>` : ''}
           <span>${formatTime(w.savedAt)}</span>
+          ${w.lastSyncedBy ? `<span title="${escapeHtml(w.lastSyncedBy)}">&#x1f4e1; ${escapeHtml(w.lastSyncedBy.substring(0, 8))}…</span>` : ''}
         </div>
         <div class="workspace-card-actions">
           <button class="btn-icon danger" data-delete="${w.id}" title="${t('deleteWorkspace')}"
@@ -321,7 +322,9 @@ function showNewWorkspaceModal(container, onCreate) {
     createBtn.disabled = true;
     createBtn.textContent = t('creating');
 
-    const id = crypto.randomUUID();
+    const id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
     const savedAt = new Date().toISOString();
 
     const { ok, data } = await api.post('/workspaces', {
@@ -387,8 +390,7 @@ function formatTime(iso) {
   if (diff < 86400000) return t('hAgo', { n: Math.floor(diff / 3600000) });
   if (diff < 604800000) return t('dAgo', { n: Math.floor(diff / 86400000) });
 
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return formatDateTimeShort(iso);
 }
 
 const svgX = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';

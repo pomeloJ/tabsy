@@ -84,4 +84,66 @@ if (!userColumns.find(c => c.name === 'role')) {
   db.exec("UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users)");
 }
 
+// Migration: add last_synced_by column to workspaces
+const wsColumns2 = db.prepare("PRAGMA table_info(workspaces)").all();
+if (!wsColumns2.find(c => c.name === 'last_synced_by')) {
+  db.exec("ALTER TABLE workspaces ADD COLUMN last_synced_by TEXT DEFAULT NULL");
+}
+
+// Migration: sync_logs table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sync_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    client_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    workspace_count INTEGER NOT NULL DEFAULT 0,
+    details TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_sync_logs_user ON sync_logs(user_id);
+  CREATE INDEX IF NOT EXISTS idx_sync_logs_client ON sync_logs(client_id);
+`);
+
+// Migration: backups table (per-user)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'manual',
+    filename TEXT NOT NULL,
+    size INTEGER DEFAULT 0,
+    workspace_count INTEGER DEFAULT 0,
+    note TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_backups_user ON backups(user_id);
+`);
+
+// Migration: add user_id to backups if missing (upgrade from global to per-user)
+const backupCols = db.prepare("PRAGMA table_info(backups)").all();
+if (!backupCols.find(c => c.name === 'user_id')) {
+  db.exec("ALTER TABLE backups ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_backups_user ON backups(user_id)");
+}
+
+// Migration: backup_settings table (per-user)
+// Check if old global backup_settings exists (key TEXT PRIMARY KEY without user_id)
+const bsColumns = db.prepare("PRAGMA table_info(backup_settings)").all();
+if (bsColumns.length > 0 && !bsColumns.find(c => c.name === 'user_id')) {
+  // Old schema — drop and recreate with per-user schema
+  db.exec("DROP TABLE backup_settings");
+}
+db.exec(`
+  CREATE TABLE IF NOT EXISTS backup_settings (
+    user_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (user_id, key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+`);
+
 module.exports = db;

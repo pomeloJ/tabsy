@@ -1,8 +1,25 @@
 import { getAll, getById, save, remove, getSettings, getPendingDeletions, clearPendingDeletions } from './storage.js';
-import { syncPull, syncPush } from './api-client.js';
+import { syncPull, syncPush, serverNow } from './api-client.js';
 import { threeWayMerge } from './merge.js';
 import { applyMergedState } from './live-sync.js';
 import { hasWorkspaceChanged } from './capture.js';
+import { hasDangerousBlocks } from './flow-schema.js';
+
+/**
+ * Strip codeTrusted from synced flows that contain dangerous blocks.
+ * Locally-created flows are trusted by default, but flows arriving from
+ * the server must be re-approved if they contain executable code.
+ */
+function sanitizeSyncedFlows(flows) {
+  if (!flows) return [];
+  return flows.map(f => {
+    if (hasDangerousBlocks(f)) {
+      const { codeTrusted, ...rest } = f;
+      return rest; // remove codeTrusted — user must re-approve
+    }
+    return f;
+  });
+}
 
 /**
  * Get/set lastSyncAt from chrome.storage.local
@@ -61,7 +78,7 @@ export async function performSync(openWorkspaceWindows = []) {
         serverWs.syncStatus = 'synced';
         serverWs.lastSyncAt = pullResult.serverTime;
         serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
-        if (!serverWs.flows) serverWs.flows = [];
+        serverWs.flows = sanitizeSyncedFlows(serverWs.flows || []);
         await save(serverWs);
         pulled++;
         continue;
@@ -69,8 +86,10 @@ export async function performSync(openWorkspaceWindows = []) {
 
       // Merge flows: server pull 不應該覆蓋 local 的 flows
       // 以 local flows 為主，server 有而 local 沒有的才加入
+      // 從 server 來的新 flow 若含 dangerous blocks，strip codeTrusted
       const mergedFlows = [...(localWs.flows || [])];
-      for (const sf of (serverWs.flows || [])) {
+      const sanitizedServerFlows = sanitizeSyncedFlows(serverWs.flows);
+      for (const sf of sanitizedServerFlows) {
         if (!mergedFlows.find(f => f.id === sf.id)) {
           mergedFlows.push(sf);
         }
@@ -170,7 +189,7 @@ export async function performSync(openWorkspaceWindows = []) {
         // Clean merge — apply and mark as pending for push
         localWs.tabs = mergeResult.merged.tabs;
         localWs.groups = mergeResult.merged.groups;
-        localWs.savedAt = new Date().toISOString();
+        localWs.savedAt = serverNow();
         localWs.syncStatus = 'pending';
         localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
         await save(localWs);
@@ -200,12 +219,55 @@ export async function performSync(openWorkspaceWindows = []) {
 
     // --- PUSH ---
     const allLocal = await getAll();
-    const toPush = allLocal.filter(w =>
+    let toPush = allLocal.filter(w =>
       w.syncStatus === 'local_only' ||
       w.syncStatus === 'pending' ||
       !w.syncStatus
     );
     const pendingDeletes = await getPendingDeletions();
+
+    // --- Re-check: full inventory sync ---
+    // When the normal pull returned nothing new (lastSyncAt was recent), do a
+    // full pull (lastSyncAt=null) to get the complete server inventory and
+    // reconcile differences:
+    //   1. Server deleted a workspace → remove locally
+    //   2. Server DB reset → local 'synced' missing on server → re-push
+    //   3. Workspace created on server (Web UI) → pull in as new
+    if (pulled === 0 && lastSyncAt) {
+      const fullPull = await syncPull(null);
+      const localIds = new Set(allLocal.map(w => w.id));
+      const serverIds = new Set(fullPull.workspaces.map(w => w.id));
+      const serverDeletedIds = new Set(fullPull.deleted || []);
+
+      // Case 1 & 2: local synced but not on server
+      for (const ws of allLocal) {
+        if (ws.syncStatus !== 'synced') continue;
+        if (serverIds.has(ws.id)) continue;
+
+        if (serverDeletedIds.has(ws.id)) {
+          // Case 1: deleted on server → remove locally
+          await remove(ws.id);
+          pulled++;
+        } else {
+          // Case 2: server doesn't know about it (DB reset) → re-push
+          ws.syncStatus = 'pending';
+          await save(ws);
+          toPush.push(ws);
+        }
+      }
+
+      // Case 3: on server but not local → pull in as new
+      for (const serverWs of fullPull.workspaces) {
+        if (!localIds.has(serverWs.id)) {
+          serverWs.syncStatus = 'synced';
+          serverWs.lastSyncAt = fullPull.serverTime;
+          serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+          serverWs.flows = sanitizeSyncedFlows(serverWs.flows || []);
+          await save(serverWs);
+          pulled++;
+        }
+      }
+    }
 
     if (toPush.length > 0 || pendingDeletes.length > 0) {
       // Strip client-only fields before sending to server
@@ -246,7 +308,7 @@ export async function performSync(openWorkspaceWindows = []) {
             // Clean merge — save merged, will push next cycle
             localWs.tabs = mergeResult.merged.tabs;
             localWs.groups = mergeResult.merged.groups;
-            localWs.savedAt = new Date().toISOString();
+            localWs.savedAt = serverNow();
             localWs.syncStatus = 'pending';
             localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
             await save(localWs);

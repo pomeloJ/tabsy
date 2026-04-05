@@ -35,8 +35,9 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
       if (!currentUrlSet.has(url)) { same = false; break; }
     }
     if (same) {
-      // URLs match — still check groups
+      // URLs match — still check groups and tab order
       await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId);
+      await syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId);
       return;
     }
   }
@@ -54,23 +55,28 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
     }
   }
 
-  // Open tabs that need to be added
+  // Open tabs that need to be added — track URL → tabId for newly created tabs
+  const newTabMap = new Map();
   const toOpen = mergedTabs.filter(t => !currentUrlSet.has(t.url));
   for (const tab of toOpen) {
     try {
-      await chrome.tabs.create({
+      const created = await chrome.tabs.create({
         windowId,
         url: tab.url,
         pinned: tab.pinned || false,
         active: false
       });
+      newTabMap.set(tab.url, created.id);
     } catch (e) {
       console.warn(`[Tabsy] Error creating tab ${tab.url}:`, e.message);
     }
   }
 
   // Rebuild group structure after tab changes
-  await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId);
+  await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap);
+
+  // Enforce correct tab order (new tabs are appended at end, groups may rearrange)
+  await syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap);
 
   // Update pinned state for existing tabs
   await syncPinnedState(windowId, mergedTabs, markerGroupId);
@@ -79,7 +85,7 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
 /**
  * Rebuild tab group structure to match merged state.
  */
-async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId) {
+async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap = new Map()) {
   if (mergedGroups.length === 0) return;
 
   // Get fresh tab list after opens/closes
@@ -89,10 +95,15 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId) {
   );
 
   // Build URL → tab ID map (first occurrence wins for duplicates)
-  const urlToTabId = new Map();
+  // Merge newTabMap first — new tabs may still be loading (url could be about:blank)
+  const urlToTabId = new Map(newTabMap);
   for (const t of liveTabs) {
     if (!urlToTabId.has(t.url)) {
       urlToTabId.set(t.url, t.id);
+    }
+    // Also check pendingUrl for tabs still navigating
+    if (t.pendingUrl && !urlToTabId.has(t.pendingUrl)) {
+      urlToTabId.set(t.pendingUrl, t.id);
     }
   }
 
@@ -139,6 +150,62 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId) {
       });
     } catch (e) {
       console.warn(`[Tabsy] Error creating group "${group.title}":`, e.message);
+    }
+  }
+}
+
+/**
+ * Reorder tabs to match the merged state order.
+ * Moves grouped tabs within each group, then ungrouped tabs, to match mergedTabs array order.
+ */
+async function syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap = new Map()) {
+  const allTabs = await chrome.tabs.query({ windowId });
+  const liveTabs = allTabs.filter(t =>
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
+  );
+
+  // Build URL → tab ID map, merge newTabMap for tabs still loading
+  const urlToTabId = new Map(newTabMap);
+  for (const t of liveTabs) {
+    if (!urlToTabId.has(t.url)) urlToTabId.set(t.url, t.id);
+    if (t.pendingUrl && !urlToTabId.has(t.pendingUrl)) urlToTabId.set(t.pendingUrl, t.id);
+  }
+
+  const groupOrder = new Map(mergedGroups.map((g, i) => [g.groupId, i]));
+
+  // Enforce order within each group
+  for (const group of mergedGroups) {
+    const groupTabUrls = mergedTabs
+      .filter(t => t.groupId === group.groupId)
+      .map(t => t.url);
+
+    if (groupTabUrls.length <= 1) continue;
+
+    for (let i = 1; i < groupTabUrls.length; i++) {
+      const prevId = urlToTabId.get(groupTabUrls[i - 1]);
+      const currId = urlToTabId.get(groupTabUrls[i]);
+      if (!prevId || !currId) continue;
+      try {
+        const prevTab = await chrome.tabs.get(prevId);
+        await chrome.tabs.move(currId, { index: prevTab.index + 1 });
+      } catch (e) { /* tab may have been removed */ }
+    }
+  }
+
+  // Enforce order for ungrouped tabs
+  const ungroupedUrls = mergedTabs
+    .filter(t => !t.pinned && (!t.groupId || !groupOrder.has(t.groupId)))
+    .map(t => t.url);
+
+  if (ungroupedUrls.length > 1) {
+    for (let i = 1; i < ungroupedUrls.length; i++) {
+      const prevId = urlToTabId.get(ungroupedUrls[i - 1]);
+      const currId = urlToTabId.get(ungroupedUrls[i]);
+      if (!prevId || !currId) continue;
+      try {
+        const prevTab = await chrome.tabs.get(prevId);
+        await chrome.tabs.move(currId, { index: prevTab.index + 1 });
+      } catch (e) { /* tab may have been removed */ }
     }
   }
 }

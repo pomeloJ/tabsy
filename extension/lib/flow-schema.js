@@ -286,6 +286,46 @@ export function createBlock(type) {
   return { type, ...structuredClone(def.defaults) };
 }
 
+// --- Dangerous block detection ---
+
+/** Block types that execute arbitrary code */
+const DANGEROUS_BLOCK_TYPES = new Set(['run_script', 'eval_expression']);
+
+/** Condition types that execute arbitrary code */
+const DANGEROUS_CONDITION_TYPES = new Set(['expression']);
+
+/**
+ * Check if a block is dangerous (executes arbitrary code).
+ * For 'if' blocks, also checks the condition type.
+ */
+export function isDangerousBlock(block) {
+  if (DANGEROUS_BLOCK_TYPES.has(block.type)) return true;
+  if (block.type === 'if' && block.condition && DANGEROUS_CONDITION_TYPES.has(block.condition.type)) return true;
+  return false;
+}
+
+/**
+ * Recursively check if a flow (or block list) contains any dangerous blocks.
+ * @param {Object} flow - Flow object with .blocks array
+ * @returns {boolean}
+ */
+export function hasDangerousBlocks(flow) {
+  function check(blocks) {
+    if (!blocks) return false;
+    for (const block of blocks) {
+      if (isDangerousBlock(block)) return true;
+      // Check nested blocks
+      if (block.then && check(block.then)) return true;
+      if (block.else && check(block.else)) return true;
+      if (block.body && check(block.body)) return true;
+      if (block.try && check(block.try)) return true;
+      if (block.catch && check(block.catch)) return true;
+    }
+    return false;
+  }
+  return check(flow.blocks || []);
+}
+
 // --- Variable interpolation (supports {{var:name}} syntax) ---
 
 export function interpolate(str, variables) {

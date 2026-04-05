@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-04-04",
+    "changes": {
+      "en": [
+        "Cloudflare Access Service Token support for extension",
+        "Separate settings into Personal/Admin tabs",
+        "Fix encryption on HTTP connections",
+        "Per-user backup system with encryption and server clock sync",
+        "Browser UUID tracking, sync logs, and timezone support",
+        "Fix security vulnerabilities across server and extension"
+      ],
+      "zh-TW": [
+        "擴充功能支援 Cloudflare Access Service Token",
+        "設定頁面分為個人/管理員分頁",
+        "修正 HTTP 連線加密問題",
+        "每位使用者獨立備份系統，支援加密與伺服器時鐘同步",
+        "瀏覽器 UUID 追蹤、同步紀錄與時區支援",
+        "修正伺服器與擴充功能的安全漏洞"
+      ]
+    }
+  },
+  {
     "version": "1.0.0",
     "date": "2026-04-04",
     "changes": {
