@@ -4,13 +4,27 @@ A self-hosted browser workspace management system. Save, restore, and sync your 
 
 **One window = one workspace.** Tabsy captures your browser tabs and tab groups into named, color-coded workspaces that you can restore with a single click.
 
+## Why Tabsy?
+
+Modern browser workflows involve dozens of tabs across multiple contexts — research, projects, clients, daily tasks. Tabsy solves three core needs:
+
+1. **Tab Sync** — Save your browser windows as workspaces and sync them across devices via a self-hosted server. Restore any workspace with one click, preserving tab groups, colors, and ordering.
+2. **Flow Automation** — Attach visual automation flows (iOS Shortcuts-style) to workspaces. Automate repetitive browser tasks with 40+ block types: click, fill, wait, loop, if/else, and more. Flows can auto-trigger when a workspace is restored.
+3. **Notes** — Attach notes to workspaces, tab groups, or individual tabs with many-to-many linking. Notes follow tabs through navigation using persistent tab IDs, survive recapture, and sync across devices with per-note conflict resolution.
+
 ## Features
 
 - **Workspace Management** — Save and restore entire browser windows as named workspaces with color coding
 - **Tab Group Support** — Preserves Chrome/Edge tab groups (name, color, collapsed state)
+- **Drag-and-Drop Reordering** — Reorder tabs within and across groups via drag-and-drop in Web UI
 - **Cross-Device Sync** — Sync workspaces between browsers via a self-hosted server
+- **Live Sync** — Real-time tab state reconciliation with automatic tab ordering
+- **Sync Change Tracking** — Detailed per-field diff history with dedicated sync logs page
+- **Notes** — Independent notes with many-to-many linking to workspaces, groups, and tabs; per-note sync merge
 - **Web Dashboard** — Manage workspaces from any browser through the built-in web UI
-- **Flows** — Automation flows with triggers, conditions, and actions attached to workspaces
+- **Flows** — Visual block-based automation (40+ block types) attached to workspaces with auto-trigger
+- **Encrypted Backups** — Per-user encrypted backup and restore
+- **Cloudflare Access** — Optional Service Token support for deployments behind Cloudflare Access
 - **Role-Based Access** — Admin and regular user roles with user management
 - **First-Time Setup Wizard** — Guided admin account creation on first launch
 - **i18n** — English and Traditional Chinese (繁體中文)
@@ -86,9 +100,10 @@ The server starts at `http://localhost:3000`. On first visit, you'll be guided t
 ### Web UI
 
 - **Dashboard** — View, search, sort, create, and delete workspaces
-- **Workspace Detail** — Edit tabs, groups, and flows
-- **Settings** — Manage sync tokens, language, and users (admin only)
-- **Import/Export** — Backup and restore workspaces as JSON
+- **Workspace Detail** — Edit tabs, groups, notes, and flows with tabbed panel UI
+- **Sync Logs** — View detailed sync change history with action/date filters
+- **Settings** — Personal settings and admin panel (user management, tokens)
+- **Backup/Restore** — Encrypted per-user backup and restore
 
 ### User Roles
 
@@ -131,11 +146,14 @@ tabsy/
 │   ├── flow-editor.html/.js # Flow editor
 │   └── lib/
 │       ├── storage.js       # chrome.storage.local CRUD
-│       ├── sync.js          # Pull/push sync logic
+│       ├── sync.js          # Pull/push sync + change tracking
+│       ├── live-sync.js     # Real-time sync reconciliation
+│       ├── capture.js       # Workspace capture with persistent tab IDs
+│       ├── merge.js         # Sync merge logic
 │       ├── api-client.js    # Server API wrapper
 │       ├── flow-*.js        # Flow schema, executor, runner
-│       ├── i18n.js          # Extension i18n
-│       └── ...
+│       ├── safe-eval.js     # Sandboxed expression eval for flows
+│       └── i18n.js          # Extension i18n
 │
 ├── server/                  # Sync server + Web UI
 │   ├── package.json
@@ -144,8 +162,11 @@ tabsy/
 │   │   ├── index.js         # Entry point
 │   │   ├── db.js            # SQLite schema + migrations
 │   │   ├── routes/
-│   │   │   ├── api.js       # Workspace CRUD + sync endpoints
-│   │   │   └── auth.js      # Auth + user management
+│   │   │   ├── api.js       # Workspace CRUD + sync + change tracking
+│   │   │   ├── auth.js      # Auth + user management
+│   │   │   └── backup.js    # Encrypted backup/restore
+│   │   ├── services/
+│   │   │   └── backup.js    # Backup encryption + file management
 │   │   └── middleware/
 │   │       └── auth.js      # Auth middleware (session + token)
 │   └── public/              # Web UI static files
@@ -173,13 +194,27 @@ MIT
 
 **一個視窗 = 一個工作區。** Tabsy 將瀏覽器分頁與分頁群組擷取為命名、色彩標記的工作區，一鍵即可還原。
 
+## 為什麼選擇 Tabsy？
+
+現代瀏覽器工作流涉及大量分頁與多種情境 — 研究、專案、客戶、日常任務。Tabsy 解決三大核心需求：
+
+1. **分頁同步** — 將瀏覽器視窗儲存為工作區，透過自架伺服器跨裝置同步。一鍵還原，完整保留分頁群組、顏色與排序。
+2. **Flow 自動化** — 為工作區附加視覺化自動化流程（類似 iOS 捷徑），40+ 種動作類型：點擊、填寫、等待、迴圈、條件判斷等。可在還原工作區時自動觸發。
+3. **筆記系統** — 將筆記附加到工作區、分頁群組或個別分頁，支援多對多連結。筆記透過持久化分頁 ID 追蹤分頁，跨裝置同步時使用逐筆記衝突解決。
+
 ## 功能特色
 
 - **工作區管理** — 將整個瀏覽器視窗儲存為命名工作區，支援色彩標記
 - **分頁群組** — 完整保留 Chrome/Edge 分頁群組（名稱、顏色、折疊狀態）
+- **拖放排序** — 在 Web UI 中透過拖放重新排列分頁
 - **跨裝置同步** — 透過自架伺服器在不同瀏覽器間同步工作區
+- **即時同步** — 分頁狀態即時同步與自動排序
+- **同步變更追蹤** — 逐欄位差異歷史記錄，附專屬同步日誌頁面
+- **筆記** — 獨立筆記系統，多對多連結工作區、群組與分頁，逐筆記同步合併
 - **網頁管理介面** — 內建 Web UI，可在任何瀏覽器管理工作區
-- **流程自動化** — 可附加觸發器、條件與動作的 Flow 流程
+- **流程自動化** — 視覺化區塊式自動化（40+ 種區塊類型），可自動觸發
+- **加密備份** — 逐使用者加密備份與還原
+- **Cloudflare Access** — 選配 Service Token 支援，適用於部署在 Cloudflare Access 後方的環境
 - **角色權限** — 管理員與一般使用者角色，管理員可管理所有使用者
 - **首次設定引導** — 首次啟動時引導建立管理員帳號
 - **多語系** — 支援英文與繁體中文
