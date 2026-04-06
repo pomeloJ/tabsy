@@ -557,9 +557,13 @@ function renderCurrentWsNotes(ws) {
     </div>`;
   }
 
-  // All tabs (skip active, already shown at top)
+  // Determine which workspace tab IDs are currently open in the browser
+  const openWsTabIds = new Set(_chromeTabToWsTab.values());
+
+  // Open tabs (skip active, already shown at top)
   for (const tab of tabs) {
     if (tab.id === activeWsTabId) continue;
+    if (!openWsTabIds.has(tab.id)) continue; // closed tabs handled below
     const tNotes = notesFor('tab', tab.id);
     html += `<div class="note-tree-item">
       <div class="note-tree-row">
@@ -568,6 +572,23 @@ function renderCurrentWsNotes(ws) {
         <button class="note-tree-add" data-add-for="tab" data-tab-id="${tab.id}">+</button>
       </div>
       ${notePreview(tNotes)}
+    </div>`;
+  }
+
+  // Uncategorized: notes linked only to closed tabs or missing groups (not shown elsewhere)
+  const existingGroupIds = new Set(groups.map(g => g.groupId));
+  const isVisibleLink = l =>
+    l.type === 'workspace' ||
+    (l.type === 'group' && existingGroupIds.has(l.groupId)) ||
+    (l.type === 'tab' && (openWsTabIds.has(l.tabId) || l.tabId === activeWsTabId));
+  const uncategorizedNotes = notes.filter(n =>
+    n.links?.length > 0 &&
+    !n.links.some(isVisibleLink)
+  );
+  if (uncategorizedNotes.length > 0) {
+    html += `<div class="note-tree-item unlinked">
+      <div class="note-tree-row"><span class="note-item-icon">📋</span><span class="note-item-label" style="opacity:0.6">${t('uncategorized') || 'Uncategorized'} (${uncategorizedNotes.length})</span></div>
+      ${notePreview(uncategorizedNotes)}
     </div>`;
   }
 
@@ -1483,5 +1504,12 @@ chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo) => {
   if (currentWorkspaceData) {
     const ws = await getById(currentWorkspaceData.id);
     if (ws) { renderCurrentWsFlows(ws); renderCurrentWsNotes(ws); }
+  }
+});
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  _chromeTabToWsTab.delete(tabId);
+  if (currentWorkspaceData) {
+    const ws = await getById(currentWorkspaceData.id);
+    if (ws) renderCurrentWsNotes(ws);
   }
 });
