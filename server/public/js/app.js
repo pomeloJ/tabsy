@@ -7,6 +7,7 @@ import { render as renderDashboard } from './components/dashboard.js';
 import { render as renderSettings } from './components/settings.js';
 import { render as renderWorkspace } from './components/workspace.js';
 import { render as renderDownload } from './components/download.js';
+import { render as renderSyncLogs } from './components/sync-logs.js';
 
 const appEl = document.getElementById('app');
 const sidebar = document.getElementById('sidebar');
@@ -87,7 +88,8 @@ function updateActiveNav() {
     const route = link.dataset.route;
     // Mark active if exact match, or if hash starts with /workspace and route is /
     const isActive = hash === '#' + route ||
-      (route === '/' && hash.startsWith('#/workspace/'));
+      (route === '/' && hash.startsWith('#/workspace/')) ||
+      (route === '/settings' && hash === '#/sync-logs');
     link.classList.toggle('active', isActive);
   });
 
@@ -129,6 +131,7 @@ const guestRoutes = {
 const authRoutes = {
   '#/': renderDashboard,
   '#/settings': (el) => renderSettings(el, currentUser),
+  '#/sync-logs': renderSyncLogs,
   '#/download': renderDownload
 };
 
@@ -205,6 +208,8 @@ async function route() {
 function updateTopbarTitle(hash) {
   if (hash.startsWith('#/workspace/')) {
     topbarTitle.textContent = t('workspace');
+  } else if (hash === '#/sync-logs') {
+    topbarTitle.textContent = t('syncLogs');
   } else if (hash === '#/settings') {
     topbarTitle.textContent = t('settings');
   } else if (hash === '#/download') {

@@ -77,6 +77,114 @@ const upsertWorkspace = db.prepare(`
 const insertSyncLog = db.prepare(
   'INSERT INTO sync_logs (user_id, client_id, action, workspace_count, details) VALUES (?, ?, ?, ?, ?)'
 );
+const insertSyncChange = db.prepare(
+  'INSERT INTO sync_changes (sync_log_id, user_id, workspace_id, workspace_name, change_type, changes) VALUES (?, ?, ?, ?, ?, ?)'
+);
+
+/** Compare old and new workspace, return a changes summary object */
+function diffWorkspace(existing, ws) {
+  const changes = {};
+  if (existing.name !== ws.name) changes.name = [existing.name, ws.name];
+  if (existing.color !== ws.color) changes.color = [existing.color, ws.color];
+  if (existing.saved_at !== ws.savedAt) changes.savedAt = [existing.saved_at, ws.savedAt];
+
+  // --- Tabs: by URL ---
+  const oldTabs = safeJsonParse(existing.tabs);
+  const newTabs = ws.tabs || [];
+  if (oldTabs.length !== newTabs.length) changes.tabCount = [oldTabs.length, newTabs.length];
+  const oldTabMap = new Map(oldTabs.map(t => [t.url, t]));
+  const tabsAdded = [];
+  const tabsModified = [];
+  for (const t of newTabs) {
+    const old = oldTabMap.get(t.url);
+    if (!old) {
+      tabsAdded.push({ url: t.url, title: t.title });
+    } else {
+      if (old.title !== t.title) tabsModified.push({ url: t.url, title: `${old.title} → ${t.title}` });
+      oldTabMap.delete(t.url);
+    }
+  }
+  const tabsRemoved = [...oldTabMap.values()].map(t => ({ url: t.url, title: t.title }));
+  if (tabsAdded.length) changes.tabsAdded = tabsAdded.slice(0, 20);
+  if (tabsRemoved.length) changes.tabsRemoved = tabsRemoved.slice(0, 20);
+  if (tabsModified.length) changes.tabsModified = tabsModified.slice(0, 20);
+
+  // --- Groups: by groupId ---
+  const oldGroups = safeJsonParse(existing.groups);
+  const newGroups = ws.groups || [];
+  if (oldGroups.length !== newGroups.length) changes.groupCount = [oldGroups.length, newGroups.length];
+  const oldGroupMap = new Map(oldGroups.map(g => [g.groupId, g]));
+  const groupsAdded = [];
+  const groupsModified = [];
+  for (const g of newGroups) {
+    const old = oldGroupMap.get(g.groupId);
+    if (!old) {
+      groupsAdded.push(g.title || g.groupId);
+    } else {
+      const diffs = [];
+      if (old.title !== g.title) diffs.push(`${old.title} → ${g.title}`);
+      if (old.color !== g.color) diffs.push(`${old.color} → ${g.color}`);
+      if (old.collapsed !== g.collapsed) diffs.push(g.collapsed ? 'collapsed' : 'expanded');
+      if (diffs.length) groupsModified.push({ name: g.title || g.groupId, diffs });
+      oldGroupMap.delete(g.groupId);
+    }
+  }
+  const groupsRemoved = [...oldGroupMap.values()].map(g => g.title || g.groupId);
+  if (groupsAdded.length) changes.groupsAdded = groupsAdded;
+  if (groupsRemoved.length) changes.groupsRemoved = groupsRemoved;
+  if (groupsModified.length) changes.groupsModified = groupsModified;
+
+  // --- Flows: by id ---
+  const oldFlows = safeJsonParse(existing.flows || '[]');
+  const newFlows = ws.flows || [];
+  if (oldFlows.length !== newFlows.length) changes.flowCount = [oldFlows.length, newFlows.length];
+  const oldFlowMap = new Map(oldFlows.map(f => [f.id, f]));
+  const flowsAdded = [];
+  const flowsModified = [];
+  for (const f of newFlows) {
+    const old = oldFlowMap.get(f.id);
+    if (!old) {
+      flowsAdded.push(f.name || f.id);
+    } else {
+      const diffs = [];
+      if (old.name !== f.name) diffs.push(`${old.name} → ${f.name}`);
+      const oldBlockCount = (old.blocks || []).length;
+      const newBlockCount = (f.blocks || []).length;
+      if (oldBlockCount !== newBlockCount) diffs.push(`blocks: ${oldBlockCount} → ${newBlockCount}`);
+      else if (JSON.stringify(old.blocks) !== JSON.stringify(f.blocks)) diffs.push('blocks changed');
+      if (old.autoRun !== f.autoRun) diffs.push(f.autoRun ? 'auto-run on' : 'auto-run off');
+      if (diffs.length) flowsModified.push({ name: f.name || f.id, diffs });
+      oldFlowMap.delete(f.id);
+    }
+  }
+  const flowsRemoved = [...oldFlowMap.values()].map(f => f.name || f.id);
+  if (flowsAdded.length) changes.flowsAdded = flowsAdded;
+  if (flowsRemoved.length) changes.flowsRemoved = flowsRemoved;
+  if (flowsModified.length) changes.flowsModified = flowsModified;
+
+  // --- Notes: by id ---
+  const oldNotes = safeJsonParse(existing.notes || '[]');
+  const newNotes = ws.notes || [];
+  if (oldNotes.length !== newNotes.length) changes.noteCount = [oldNotes.length, newNotes.length];
+  const oldNoteMap = new Map(oldNotes.map(n => [n.id, n]));
+  const notesAdded = [];
+  const notesModified = [];
+  for (const n of newNotes) {
+    const old = oldNoteMap.get(n.id);
+    if (!old) {
+      notesAdded.push(n.content ? n.content.substring(0, 60) : n.id);
+    } else if (old.content !== n.content || old.updatedAt !== n.updatedAt) {
+      notesModified.push(n.content ? n.content.substring(0, 60) : n.id);
+    }
+    oldNoteMap.delete(n.id);
+  }
+  const notesRemoved = [...oldNoteMap.values()].map(n => n.content ? n.content.substring(0, 60) : n.id);
+  if (notesAdded.length) changes.notesAdded = notesAdded;
+  if (notesModified.length) changes.notesModified = notesModified;
+  if (notesRemoved.length) changes.notesRemoved = notesRemoved;
+
+  return changes;
+}
 
 // GET /api/workspaces
 router.get('/workspaces', (req, res) => {
@@ -254,6 +362,7 @@ router.post('/sync/push', (req, res) => {
   }
 
   const conflicts = [];
+  const changeRecords = []; // collect change details to insert after transaction
 
   const pushTransaction = db.transaction(() => {
     // Process upserts
@@ -281,6 +390,15 @@ router.post('/sync/push', (req, res) => {
         continue;
       }
 
+      // Record change details — always record if push happens
+      if (existing) {
+        const changes = diffWorkspace(existing, ws);
+        changeRecords.push({ wsId: ws.id, wsName: ws.name, type: 'updated', changes });
+      } else {
+        const tabCount = (ws.tabs || []).length;
+        changeRecords.push({ wsId: ws.id, wsName: ws.name, type: 'created', changes: { tabCount: [0, tabCount] } });
+      }
+
       upsertWorkspace.run(
         ws.id, req.userId, ws.name, ws.color, ws.savedAt,
         JSON.stringify(ws.groups || []),
@@ -294,6 +412,10 @@ router.post('/sync/push', (req, res) => {
     // Process deletes
     for (const id of toDelete) {
       if (!isValidId(id)) continue;
+      // Capture name before deletion
+      const existing = getWorkspace.get(id, req.userId);
+      const wsName = existing ? existing.name : id;
+      changeRecords.push({ wsId: id, wsName, type: 'deleted', changes: {} });
       deleteWorkspace.run(id, req.userId);
       recordDeletion.run(id, req.userId);
     }
@@ -301,10 +423,19 @@ router.post('/sync/push', (req, res) => {
 
   pushTransaction();
 
-  // Log this push event (only when there are actual changes)
+  // Log this push event and record detailed changes
+  let syncLogId = null;
   if (clientId && (upsert.length > 0 || toDelete.length > 0)) {
     const wsIds = [...upsert.filter(w => w.id).map(w => w.id), ...toDelete];
-    insertSyncLog.run(req.userId, clientId, 'push', upsert.length + toDelete.length, JSON.stringify(wsIds));
+    const result = insertSyncLog.run(req.userId, clientId, 'push', upsert.length + toDelete.length, JSON.stringify(wsIds));
+    syncLogId = result.lastInsertRowid;
+  }
+
+  // Insert change records
+  for (const rec of changeRecords) {
+    insertSyncChange.run(
+      syncLogId, req.userId, rec.wsId, rec.wsName, rec.type, JSON.stringify(rec.changes)
+    );
   }
 
   res.json({
@@ -328,6 +459,44 @@ router.get('/sync/logs', requireAuth, (req, res) => {
       action: r.action,
       workspaceCount: r.workspace_count,
       workspaceIds: safeJsonParse(r.details),
+      createdAt: utc(r.created_at)
+    }))
+  });
+});
+
+// GET /api/sync/changes — retrieve detailed change history
+const getSyncChanges = db.prepare(
+  'SELECT id, sync_log_id, workspace_id, workspace_name, change_type, changes, created_at FROM sync_changes WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+);
+const getSyncChangesByLog = db.prepare(
+  'SELECT id, workspace_id, workspace_name, change_type, changes, created_at FROM sync_changes WHERE sync_log_id = ? AND user_id = ? ORDER BY id'
+);
+
+router.get('/sync/changes', requireAuth, (req, res) => {
+  const logId = req.query.logId;
+  if (logId) {
+    const rows = getSyncChangesByLog.all(parseInt(logId), req.userId);
+    return res.json({
+      changes: rows.map(r => ({
+        id: r.id,
+        workspaceId: r.workspace_id,
+        workspaceName: r.workspace_name,
+        changeType: r.change_type,
+        changes: safeJsonParse(r.changes, {}),
+        createdAt: utc(r.created_at)
+      }))
+    });
+  }
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const rows = getSyncChanges.all(req.userId, limit);
+  res.json({
+    changes: rows.map(r => ({
+      id: r.id,
+      syncLogId: r.sync_log_id,
+      workspaceId: r.workspace_id,
+      workspaceName: r.workspace_name,
+      changeType: r.change_type,
+      changes: safeJsonParse(r.changes, {}),
       createdAt: utc(r.created_at)
     }))
   });

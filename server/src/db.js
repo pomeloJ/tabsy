@@ -215,6 +215,23 @@ if (!wsColumns3.find(c => c.name === 'notes')) {
   }
 }
 
+// Migration: sync_changes table (detailed change tracking per sync)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sync_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sync_log_id INTEGER,
+    user_id INTEGER NOT NULL,
+    workspace_id TEXT NOT NULL,
+    workspace_name TEXT DEFAULT '',
+    change_type TEXT NOT NULL,
+    changes TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_sync_changes_log ON sync_changes(sync_log_id);
+  CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(user_id);
+`);
+
 // Migration: convert datetime('now') format ("YYYY-MM-DD HH:MM:SS") to ISO 8601 ("YYYY-MM-DDTHH:MM:SS.SSSZ")
 // so that string comparisons in pull queries work correctly
 db.exec(`

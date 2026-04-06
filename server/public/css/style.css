@@ -822,6 +822,84 @@ body.guest .main {
   background: #e3f2fd;
   color: #1565c0;
 }
+.sync-change-created {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.sync-change-updated {
+  background: #fff3e0;
+  color: #e65100;
+}
+.sync-change-deleted {
+  background: #fce4ec;
+  color: #c62828;
+}
+.sync-log-row.clickable {
+  cursor: pointer;
+}
+.sync-log-row.clickable:hover td {
+  background: #f5f5f5;
+}
+.sync-changes-panel {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px;
+}
+.sync-change-card {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sync-change-card:last-child {
+  border-bottom: none;
+}
+.sync-change-details {
+  width: 100%;
+  font-size: 12px;
+  color: #666;
+  padding-left: 4px;
+  line-height: 1.6;
+}
+.sync-change-added {
+  color: #2e7d32;
+}
+.sync-change-removed {
+  color: #c62828;
+}
+.sync-logs-page {
+  max-width: 720px;
+}
+.sync-logs-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.sync-logs-filters select {
+  min-width: 140px;
+}
+.sync-logs-filters input[type="date"] {
+  min-width: 130px;
+}
+.sync-log-row.expanded td {
+  background: #f5f5f5;
+}
+.sync-detail-row td {
+  padding: 0 !important;
+}
+.sync-detail-inline {
+  padding: 8px 12px 12px;
+  background: #fafafa;
+}
+.sync-detail-inline .sync-changes-panel {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
 
 /* === Workspace Detail === */
 .ws-detail {
