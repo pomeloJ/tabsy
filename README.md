@@ -83,6 +83,18 @@ The server starts at `http://localhost:3000`. On first visit, you'll be guided t
 
 ### Extension Setup
 
+**Option 1: Download from Web UI**
+
+1. Log in to the Web UI and go to the **Download** page
+2. Download the extension ZIP file and extract it
+3. Open `chrome://extensions/` or `edge://extensions/`
+4. Enable **Developer mode**
+5. Click **Load unpacked** and select the extracted folder
+6. Click the Tabsy icon in the toolbar to open the side panel
+7. Go to Settings in the web UI, create a sync token, and paste it into the extension
+
+**Option 2: Load from source**
+
 1. Open `chrome://extensions/` or `edge://extensions/`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select the `extension/` folder
@@ -245,11 +257,23 @@ npm start
 
 ### 擴充功能安裝
 
+**方式一：從 Web UI 下載**
+
+1. 登入 Web UI，進入**下載**頁面
+2. 下載擴充功能 ZIP 檔案並解壓縮
+3. 開啟 `chrome://extensions/` 或 `edge://extensions/`
+4. 啟用**開發者模式**
+5. 點擊**載入未封裝項目**，選擇解壓縮後的資料夾
+6. 點擊工具列的 Tabsy 圖示開啟側邊面板
+7. 在 Web UI 的設定頁面建立同步令牌，貼入擴充功能中
+
+**方式二：從原始碼載入**
+
 1. 開啟 `chrome://extensions/` 或 `edge://extensions/`
 2. 啟用**開發者模式**
 3. 點擊**載入未封裝項目**，選擇 `extension/` 資料夾
 4. 點擊工具列的 Tabsy 圖示開啟側邊面板
-5. 在 Web UI 的設定頁面建立同步令牌，貼入擴充功��中
+5. 在 Web UI 的設定頁面建立同步令牌，貼入擴充功能中
 
 ### 使用者角色
 
