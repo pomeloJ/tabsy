@@ -279,6 +279,56 @@
       border-left: 2px solid var(--primary);
       padding-left: 6px;
     }
+    /* Active tab notes — pinned at top */
+    .notes-active-tab {
+      background: #f0f7ff;
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .notes-active-header .note-item-icon {
+      background: #e0ecf7;
+      border-radius: 4px;
+      padding: 1px 3px;
+      font-size: 12px;
+    }
+    .notes-active-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .notes-active-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--primary);
+    }
+    .notes-active-note {
+      background: #fff;
+      border: 1px solid #dde4ec;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: pointer;
+      max-height: none;
+    }
+    .notes-active-note:hover {
+      background: #e5f0fa;
+    }
+    .notes-active-empty {
+      font-size: 12px;
+      color: #999;
+      padding: 4px 0;
+    }
     .note-tree-row {
       display: flex;
       align-items: center;
@@ -299,6 +349,10 @@
       transition: opacity 0.15s;
     }
     .note-tree-item:hover .note-tree-add { opacity: 1; }
+    .notes-active-header .note-tree-add,
+    .notes-active-empty .note-tree-add { opacity: 1; background: var(--primary); color: #fff; border-color: var(--primary); }
+    .notes-active-header .note-tree-add:hover,
+    .notes-active-empty .note-tree-add:hover { opacity: 0.8; }
     .note-tree-add:hover { background: var(--border); color: var(--text); }
     .notes-tree-note {
       margin: 2px 0 2px 26px;

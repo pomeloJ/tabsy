@@ -44,22 +44,48 @@ export async function captureWindow(windowId, name, color, existingId = null) {
     }
   }
 
-  const workspaceTabs = tabs.map((t, i) => ({
-    url: t.url,
-    title: t.title || '',
-    pinned: t.pinned || false,
-    groupId: t.groupId !== -1 ? (groupIdMap[t.groupId] || null) : null,
-    index: i
-  }));
-
-  // Preserve existing flows and notes when recapturing
+  // Preserve existing data when recapturing
   let existingFlows = [];
   let existingNotes = [];
+  let existingTabs = [];
   if (existingId) {
     const existing = await getById(existingId);
     if (existing?.flows) existingFlows = existing.flows;
     if (existing?.notes) existingNotes = existing.notes;
+    if (existing?.tabs) existingTabs = existing.tabs;
   }
+
+  // Build maps to preserve tab IDs on recapture
+  // 1. Chrome tab ID → workspace tab ID (most reliable, survives URL changes)
+  const chromeIdToWsTabId = {};
+  // 2. URL → workspace tab ID (fallback for new tabs)
+  const urlToTabId = {};
+  for (const t of existingTabs) {
+    if (t.id && t._chromeTabId) chromeIdToWsTabId[t._chromeTabId] = t.id;
+    if (t.id) urlToTabId[t.url] = t.id;
+  }
+
+  const usedIds = new Set();
+  const workspaceTabs = tabs.map((t, i) => {
+    // Prefer matching by Chrome tab ID (survives navigation), then by URL
+    let tabId = chromeIdToWsTabId[t.id];
+    if (!tabId || usedIds.has(tabId)) {
+      tabId = urlToTabId[t.url];
+    }
+    if (!tabId || usedIds.has(tabId)) {
+      tabId = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + i;
+    }
+    usedIds.add(tabId);
+    return {
+      id: tabId,
+      _chromeTabId: t.id, // Store Chrome tab ID for next recapture
+      url: t.url,
+      title: t.title || '',
+      pinned: t.pinned || false,
+      groupId: t.groupId !== -1 ? (groupIdMap[t.groupId] || null) : null,
+      index: i
+    };
+  });
 
   return {
     id: existingId || generateId(),

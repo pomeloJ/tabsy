@@ -53,8 +53,27 @@ export async function render(container, workspaceId) {
   }
 
   state = structuredClone(data);
-  original = JSON.stringify(data);
-  isDirty = false;
+
+  // Migrate: ensure all tabs have persistent IDs
+  let needsMigration = false;
+  for (let i = 0; i < (state.tabs || []).length; i++) {
+    if (!state.tabs[i].id) {
+      state.tabs[i].id = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + i;
+      needsMigration = true;
+    }
+  }
+  // Migrate: convert old url-based note links to tabId-based
+  for (const note of (state.notes || [])) {
+    for (const link of (note.links || [])) {
+      if (link.type === 'tab' && link.url && !link.tabId) {
+        const tab = (state.tabs || []).find(t => t.url === link.url);
+        if (tab?.id) { link.tabId = tab.id; delete link.url; needsMigration = true; }
+      }
+    }
+  }
+
+  original = JSON.stringify(needsMigration ? state : data);
+  isDirty = needsMigration;
 
   // Warn on unsaved changes
   beforeUnloadHandler = (e) => {
@@ -394,7 +413,7 @@ function hasNoteFor(type, id) {
   return getNotesArray().some(n => n.links.some(l =>
     type === 'workspace' ? l.type === 'workspace' :
     type === 'group' ? (l.type === 'group' && l.groupId === id) :
-    type === 'tab' ? (l.type === 'tab' && l.url === id) : false
+    type === 'tab' ? (l.type === 'tab' && l.tabId === id) : false
   ));
 }
 
@@ -402,7 +421,7 @@ function findNotesFor(type, id) {
   return getNotesArray().filter(n => n.links.some(l =>
     type === 'workspace' ? l.type === 'workspace' :
     type === 'group' ? (l.type === 'group' && l.groupId === id) :
-    type === 'tab' ? (l.type === 'tab' && l.url === id) : false
+    type === 'tab' ? (l.type === 'tab' && l.tabId === id) : false
   ));
 }
 
@@ -413,8 +432,8 @@ function getLinkLabel(link) {
     return `📁 ${g ? g.title : link.groupId}`;
   }
   if (link.type === 'tab') {
-    const tab = (state.tabs || []).find(t => t.url === link.url);
-    return `📄 ${tab ? (tab.title || link.url) : link.url}`;
+    const tab = (state.tabs || []).find(t => t.id === link.tabId);
+    return `📄 ${tab ? (tab.title || tab.url) : link.tabId}`;
   }
   return '?';
 }
@@ -544,7 +563,7 @@ function updateLinkChips(container, note) {
         const type = cb.dataset.linkType;
         if (type === 'workspace') cb.checked = note.links.some(l => l.type === 'workspace');
         else if (type === 'group') cb.checked = note.links.some(l => l.type === 'group' && l.groupId === cb.dataset.linkGid);
-        else if (type === 'tab') cb.checked = note.links.some(l => l.type === 'tab' && l.url === cb.dataset.linkUrl);
+        else if (type === 'tab') cb.checked = note.links.some(l => l.type === 'tab' && l.tabId === cb.dataset.linkTabId);
       });
       renderGroups();
     });
@@ -558,7 +577,7 @@ function renderNoteLinks(container, note) {
   // Build picker options
   const hasWs = note.links.some(l => l.type === 'workspace');
   const linkedGroupIds = new Set(note.links.filter(l => l.type === 'group').map(l => l.groupId));
-  const linkedTabUrls = new Set(note.links.filter(l => l.type === 'tab').map(l => l.url));
+  const linkedTabIds = new Set(note.links.filter(l => l.type === 'tab').map(l => l.tabId));
 
   container.innerHTML = `
     <div class="ws-note-links-current"></div>
@@ -569,7 +588,7 @@ function renderNoteLinks(container, note) {
         ${groups.length > 0 ? `<div class="ws-note-link-divider">${t('groups')}</div>` : ''}
         ${groups.map(g => `<label class="ws-note-link-option"><input type="checkbox" data-link-type="group" data-link-gid="${g.groupId}" ${linkedGroupIds.has(g.groupId) ? 'checked' : ''}> 📁 ${escapeHtml(g.title || t('untitled'))}</label>`).join('')}
         ${tabs.length > 0 ? `<div class="ws-note-link-divider">${t('tabs')}</div>` : ''}
-        ${tabs.map(tab => `<label class="ws-note-link-option"><input type="checkbox" data-link-type="tab" data-link-url="${escapeAttr(tab.url)}" ${linkedTabUrls.has(tab.url) ? 'checked' : ''}> 📄 ${escapeHtml(tab.title || tab.url)}</label>`).join('')}
+        ${tabs.map(tab => `<label class="ws-note-link-option"><input type="checkbox" data-link-type="tab" data-link-tab-id="${tab.id || ''}" ${linkedTabIds.has(tab.id) ? 'checked' : ''}> 📄 ${escapeHtml(tab.title || tab.url)}</label>`).join('')}
       </div>
     </details>
   `;
@@ -589,9 +608,9 @@ function renderNoteLinks(container, note) {
         if (cb.checked) { note.links.push({ type: 'group', groupId: gid }); }
         else { note.links = note.links.filter(l => !(l.type === 'group' && l.groupId === gid)); }
       } else if (type === 'tab') {
-        const url = cb.dataset.linkUrl;
-        if (cb.checked) { note.links.push({ type: 'tab', url }); }
-        else { note.links = note.links.filter(l => !(l.type === 'tab' && l.url === url)); }
+        const tabId = cb.dataset.linkTabId;
+        if (cb.checked) { note.links.push({ type: 'tab', tabId }); }
+        else { note.links = note.links.filter(l => !(l.type === 'tab' && l.tabId === tabId)); }
       }
       note.updatedAt = new Date().toISOString();
       markDirty();
@@ -696,7 +715,7 @@ function renderTab(tab, idx) {
         <div class="ws-tab-url">${escapeHtml(tab.url)}</div>
       </div>
       ${tab.pinned ? `<span class="ws-tab-pin">${t('pin')}</span>` : ''}
-      <button class="btn-icon ws-notes-btn ${hasNoteFor('tab', tab.url) ? 'has-notes' : ''}" data-action="notes-tab" data-tab-url="${escapeAttr(tab.url)}" title="${t('notesLabel')}">${svgNotes}</button>
+      <button class="btn-icon ws-notes-btn ${hasNoteFor('tab', tab.id) ? 'has-notes' : ''}" data-action="notes-tab" data-tab-id="${tab.id || ''}" title="${t('notesLabel')}">${svgNotes}</button>
       <a class="btn-icon ws-tab-open" href="${escapeAttr(tab.url)}" target="_blank" rel="noopener noreferrer" title="${t('openInNewTab')}" aria-label="${t('openInNewTab')}">${svgExternalLink}</a>
       <select class="ws-tab-move" title="${t('moveToGroup')}" aria-label="${t('moveTabToGroup')}">${moveOptions}</select>
       <button class="btn-icon danger ws-tab-del" title="${t('removeTab')}" aria-label="${t('removeTab')}">${svgX}</button>
@@ -795,12 +814,12 @@ function bindGroupEvents(groupsEl) {
   groupsEl.querySelectorAll('[data-action="notes-tab"]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const url = btn.dataset.tabUrl;
-      let existing = findNotesFor('tab', url);
+      const tabId = btn.dataset.tabId;
+      let existing = findNotesFor('tab', tabId);
       if (existing.length > 0) {
         openNoteEditor(existing[0].id);
       } else {
-        const note = { id: generateNoteId(), content: '', links: [{ type: 'tab', url }], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        const note = { id: generateNoteId(), content: '', links: [{ type: 'tab', tabId }], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         if (!state.notes) state.notes = [];
         state.notes.push(note);
         markDirty();
@@ -1072,6 +1091,7 @@ function addTab(urlInput) {
   try { title = new URL(url).hostname; } catch {}
 
   state.tabs.push({
+    id: 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     url,
     title,
     pinned: false,

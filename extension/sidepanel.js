@@ -51,6 +51,9 @@ const otherWsTitle = document.getElementById('other-ws-title');
 let selectedColor = COLORS[0].hex;
 let currentWorkspaceData = null; // { id, name, color } of detected workspace
 let _activeTabUrl = '';
+let _activeTabId = null; // Chrome tab ID of the active tab
+let _activeTabTitle = ''; // Live title of the active tab
+let _chromeTabToWsTab = new Map(); // Chrome tab ID → workspace tab.id
 
 function matchUrlPattern(pattern, url) {
   if (!pattern) return false;
@@ -63,7 +66,9 @@ async function refreshActiveTabUrl() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     _activeTabUrl = tab?.url || '';
-  } catch { _activeTabUrl = ''; }
+    _activeTabId = tab?.id ?? null;
+    _activeTabTitle = tab?.title || '';
+  } catch { _activeTabUrl = ''; _activeTabId = null; _activeTabTitle = ''; }
 }
 
 // --- Color picker ---
@@ -286,8 +291,52 @@ async function detectCurrentWorkspace() {
 
     if (ws) {
       currentWorkspaceData = { id: ws.id, name: ws.name, color: ws.color };
+
+      // Ensure all workspace tabs have persistent IDs
+      let tabsMigrated = false;
+      for (let i = 0; i < (ws.tabs || []).length; i++) {
+        if (!ws.tabs[i].id) {
+          ws.tabs[i].id = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + i;
+          tabsMigrated = true;
+        }
+      }
+      if (tabsMigrated) await save(ws);
+
       const realTabs = tabs.filter(t => !isMarkerUrl(t.url) && (markerTab.groupId === -1 || t.groupId !== markerTab.groupId));
-      currentWsMeta.textContent = `${realTabs.length} tabs · ${formatTime(ws.savedAt)}`;
+
+      // Build Chrome tab ID → workspace tab ID mapping
+      const newMap = new Map();
+      const usedWsTabIds = new Set();
+      // First pass: match by _chromeTabId stored in workspace tabs (most reliable)
+      for (const bt of realTabs) {
+        const wsTab = (ws.tabs || []).find(wt => wt._chromeTabId === bt.id && !usedWsTabIds.has(wt.id));
+        if (wsTab?.id) {
+          newMap.set(bt.id, wsTab.id);
+          usedWsTabIds.add(wsTab.id);
+        }
+      }
+      // Second pass: keep existing runtime mappings
+      for (const bt of realTabs) {
+        if (newMap.has(bt.id)) continue;
+        const existingWsTabId = _chromeTabToWsTab.get(bt.id);
+        if (existingWsTabId && (ws.tabs || []).some(wt => wt.id === existingWsTabId && !usedWsTabIds.has(wt.id))) {
+          newMap.set(bt.id, existingWsTabId);
+          usedWsTabIds.add(existingWsTabId);
+        }
+      }
+      // Third pass: match remaining by URL
+      for (const bt of realTabs) {
+        if (newMap.has(bt.id)) continue;
+        const wsTab = (ws.tabs || []).find(wt => wt.url === bt.url && !usedWsTabIds.has(wt.id));
+        if (wsTab?.id) {
+          newMap.set(bt.id, wsTab.id);
+          usedWsTabIds.add(wsTab.id);
+        }
+      }
+      _chromeTabToWsTab = newMap;
+      console.log('[mapping] built mapping:', [...newMap.entries()].map(([k,v]) => `chrome:${k}→ws:${v}`).join(', '));
+
+      currentWsMeta.innerHTML = `${realTabs.length} tabs · ${formatTime(ws.savedAt, { liveAttr: true })}`;
       currentWsMeta.style.display = 'block';
       currentWsActions.style.display = 'flex';
       // In a workspace — show collapsible toggle, collapse save section by default
@@ -420,11 +469,27 @@ function renderCurrentWsNotes(ws) {
   const groups = ws.groups || [];
   const tabs = ws.tabs || [];
 
+  // Migrate old url-based tab links to tabId-based
+  let migrated = false;
+  for (const note of notes) {
+    for (const link of (note.links || [])) {
+      if (link.type === 'tab' && link.url && !link.tabId) {
+        const tab = tabs.find(t => t.url === link.url);
+        if (tab?.id) {
+          link.tabId = tab.id;
+          delete link.url;
+          migrated = true;
+        }
+      }
+    }
+  }
+  if (migrated) save(ws);
+
   // Helper: find notes linked to a target
   const notesFor = (type, id) => notes.filter(n => n.links?.some(l =>
     type === 'workspace' ? l.type === 'workspace' :
     type === 'group' ? (l.type === 'group' && l.groupId === id) :
-    type === 'tab' ? (l.type === 'tab' && l.url === id) : false
+    type === 'tab' ? (l.type === 'tab' && l.tabId === id) : false
   ));
 
   const notePreview = (noteList) => {
@@ -435,7 +500,34 @@ function renderCurrentWsNotes(ws) {
     }).join('');
   };
 
-  let html = `<div class="notes-section-header" id="notes-toggle">
+  // Resolve active tab → workspace tab via Chrome tab ID mapping
+  const activeWsTabId = _activeTabId != null ? _chromeTabToWsTab.get(_activeTabId) : null;
+  const activeTab = activeWsTabId ? tabs.find(t => t.id === activeWsTabId) : null;
+  const activeTabNotes = activeTab ? notesFor('tab', activeTab.id) : [];
+  console.log('[notes] chromeTabId:', _activeTabId, '→ wsTabId:', activeWsTabId, '→ activeTab:', activeTab?.title, '| mapping size:', _chromeTabToWsTab.size, '| notes:', activeTabNotes.length);
+
+  let html = '';
+
+  // === Active tab notes — pinned at top ===
+  html += `<div class="notes-active-tab">`;
+  html += `<div class="notes-active-header">
+    <span class="note-item-icon">📄</span>
+    <span class="notes-active-label">${activeTab ? escapeHtml(_activeTabTitle || _activeTabUrl || activeTab.title || activeTab.url) : t('noActiveTab')}</span>
+    ${activeTab ? `<button class="note-tree-add" data-add-for="tab" data-tab-id="${activeTab.id}">+</button>` : ''}
+  </div>`;
+  if (activeTabNotes.length > 0) {
+    html += activeTabNotes.map(n => {
+      const lines = n.content.split('\n').slice(0, 10).join('\n');
+      const preview = lines.length > 500 ? lines.slice(0, 500) + '…' : lines;
+      return `<div class="notes-active-note" data-note-id="${n.id}">${escapeHtml(preview)}</div>`;
+    }).join('');
+  } else if (activeTab) {
+    html += `<div class="notes-active-empty">${t('noNotes')} <button class="note-tree-add" data-add-for="tab" data-tab-id="${activeTab.id}">+</button></div>`;
+  }
+  html += `</div>`;
+
+  // === Collapsible tree for all notes ===
+  html += `<div class="notes-section-header" id="notes-toggle">
     <span>${t('notes')}${notes.length ? ` (${notes.length})` : ''}</span>
     <span class="arrow ${_notesCollapsed ? '' : 'open'}">&#9654;</span>
   </div>`;
@@ -465,15 +557,15 @@ function renderCurrentWsNotes(ws) {
     </div>`;
   }
 
-  // All tabs
+  // All tabs (skip active, already shown at top)
   for (const tab of tabs) {
-    const tNotes = notesFor('tab', tab.url);
-    const isActive = tab.url === _activeTabUrl;
-    html += `<div class="note-tree-item ${isActive ? 'active-tab' : ''}">
+    if (tab.id === activeWsTabId) continue;
+    const tNotes = notesFor('tab', tab.id);
+    html += `<div class="note-tree-item">
       <div class="note-tree-row">
         <span class="note-item-icon">📄</span>
         <span class="note-item-label">${escapeHtml(tab.title || tab.url)}</span>
-        <button class="note-tree-add" data-add-for="tab" data-url="${escapeHtml(tab.url)}">+</button>
+        <button class="note-tree-add" data-add-for="tab" data-tab-id="${tab.id}">+</button>
       </div>
       ${notePreview(tNotes)}
     </div>`;
@@ -502,8 +594,8 @@ function renderCurrentWsNotes(ws) {
     currentWsNotes.querySelector('.notes-list').classList.toggle('collapsed', _notesCollapsed);
   });
 
-  // Click note to edit
-  currentWsNotes.querySelectorAll('.notes-tree-note').forEach(el => {
+  // Click note to edit (both tree notes and active tab notes)
+  currentWsNotes.querySelectorAll('.notes-tree-note, .notes-active-note').forEach(el => {
     el.addEventListener('click', () => {
       openNoteEditor(ws, el.dataset.noteId);
     });
@@ -516,7 +608,7 @@ function renderCurrentWsNotes(ws) {
       const forType = btn.dataset.addFor;
       const link = forType === 'workspace' ? { type: 'workspace' } :
                    forType === 'group' ? { type: 'group', groupId: btn.dataset.gid } :
-                   { type: 'tab', url: btn.dataset.url };
+                   { type: 'tab', tabId: btn.dataset.tabId };
       const note = { id: 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), content: '', links: [link], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       if (!ws.notes) ws.notes = [];
       ws.notes.push(note);
@@ -541,7 +633,7 @@ function openNoteEditor(ws, noteId) {
   const linkLabels = (note.links || []).map(l => {
     if (l.type === 'workspace') return `📂 ${ws.name}`;
     if (l.type === 'group') { const g = (ws.groups || []).find(g => g.groupId === l.groupId); return `📁 ${g ? g.title : l.groupId}`; }
-    if (l.type === 'tab') { const tab = (ws.tabs || []).find(t => t.url === l.url); return `📄 ${tab ? tab.title : l.url}`; }
+    if (l.type === 'tab') { const tab = (ws.tabs || []).find(t => t.id === l.tabId); return `📄 ${tab ? (tab.title || tab.url) : l.tabId}`; }
     return '?';
   });
 
@@ -596,13 +688,13 @@ function buildCardHtml(w, wsFlows) {
         ${syncBadge(w.syncStatus)}
       </div>
       <div class="ws-card-meta">
-        ${w.tabs.length} tab${w.tabs.length !== 1 ? 's' : ''} · ${w.groups.length} group${w.groups.length !== 1 ? 's' : ''} · ${formatTime(w.savedAt)}
+        ${w.tabs.length} tab${w.tabs.length !== 1 ? 's' : ''} · ${w.groups.length} group${w.groups.length !== 1 ? 's' : ''} · ${formatTime(w.savedAt, { liveAttr: true })}
       </div>
       ${renderConflictSection(w)}
       ${renderFlowChips(w.id, wsFlows)}
       <div class="ws-card-actions">
         <button class="btn btn-primary btn-sm" data-restore="${w.id}">${t('restore')}</button>
-        <button class="btn btn-secondary btn-sm" data-notes="${w.id}">📝</button>
+        <button class="btn btn-secondary btn-sm" data-notes="${w.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
         <button class="btn btn-danger btn-sm" data-delete="${w.id}">${t('delete')}</button>
       </div>`;
 }
@@ -772,17 +864,40 @@ function syncBadge(status) {
   return `<span class="ws-card-sync ${status}">${label}</span>`;
 }
 
-function formatTime(iso) {
+function formatTime(iso, { liveAttr = false } = {}) {
   const d = new Date(iso);
   if (isNaN(d)) return iso || '';
   const now = Date.now();
   const diffSec = Math.floor((now - d.getTime()) / 1000);
   if (diffSec < 0) return formatDateTimeShort(iso, _currentTz);
-  if (diffSec < 60) return `${diffSec}${t('secondsAgo')}`;
+  if (diffSec < 60) {
+    const text = `${diffSec}${t('secondsAgo')}`;
+    return liveAttr ? `<span class="live-time" data-time="${iso}">${text}</span>` : text;
+  }
   const diffMin = Math.floor(diffSec / 60);
   if (diffMin < 10) return `${diffMin}${t('minutesAgo')}`;
   return formatDateTimeShort(iso, _currentTz);
 }
+
+// Live-update all .live-time elements every second
+setInterval(() => {
+  document.querySelectorAll('.live-time').forEach(el => {
+    const iso = el.dataset.time;
+    const d = new Date(iso);
+    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diffSec >= 60) {
+      // Graduated past seconds — replace with static text
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 10) {
+        el.replaceWith(`${diffMin}${t('minutesAgo')}`);
+      } else {
+        el.replaceWith(formatDateTimeShort(iso, _currentTz));
+      }
+    } else {
+      el.textContent = `${diffSec}${t('secondsAgo')}`;
+    }
+  });
+}, 1000);
 
 // --- Conflict UI ---
 
@@ -1361,7 +1476,8 @@ chrome.tabs.onActivated.addListener(async () => {
   }
 });
 chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo) => {
-  if (!changeInfo.url) return;
+  if (!changeInfo.url && !changeInfo.title) return;
+  console.log('[onUpdated] tabId:', _tabId, 'change:', changeInfo, 'mapping has:', _chromeTabToWsTab.has(_tabId));
   await refreshActiveTabUrl();
   renderList();
   if (currentWorkspaceData) {

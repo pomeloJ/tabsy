@@ -99,7 +99,7 @@ export async function render(container) {
           <span>${w.tabCount} ${w.tabCount !== 1 ? t('tabs') : t('tab')}</span>
           <span>${w.groupCount} ${w.groupCount !== 1 ? t('groups') : t('group')}</span>
           ${w.flowCount > 0 ? `<span>${w.flowCount} ${w.flowCount !== 1 ? t('flowsPlural') : t('flow')}</span>` : ''}
-          <span>${formatTime(w.savedAt)}</span>
+          <span>${formatTime(w.savedAt, { liveAttr: true })}</span>
           ${w.lastSyncedBy ? `<span title="${escapeHtml(w.lastSyncedBy)}">&#x1f4e1; ${escapeHtml(w.lastSyncedBy.substring(0, 8))}…</span>` : ''}
         </div>
         <div class="workspace-card-actions">
@@ -379,19 +379,38 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function formatTime(iso) {
+function formatTime(iso, { liveAttr = false } = {}) {
   const d = new Date(iso);
   if (isNaN(d)) return iso;
   const now = new Date();
   const diff = now - d;
 
-  if (diff < 60000) return t('justNow');
+  if (diff < 60000) {
+    const sec = Math.floor(diff / 1000);
+    const text = t('sAgo', { n: sec });
+    return liveAttr ? `<span class="live-time" data-time="${iso}">${text}</span>` : text;
+  }
   if (diff < 3600000) return t('mAgo', { n: Math.floor(diff / 60000) });
   if (diff < 86400000) return t('hAgo', { n: Math.floor(diff / 3600000) });
   if (diff < 604800000) return t('dAgo', { n: Math.floor(diff / 86400000) });
 
   return formatDateTimeShort(iso);
 }
+
+// Live-update all .live-time elements every second
+setInterval(() => {
+  document.querySelectorAll('.live-time').forEach(el => {
+    const iso = el.dataset.time;
+    const d = new Date(iso);
+    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diffSec >= 60) {
+      const diffMin = Math.floor(diffSec / 60);
+      el.replaceWith(t('mAgo', { n: diffMin }));
+    } else {
+      el.textContent = t('sAgo', { n: diffSec });
+    }
+  });
+}, 1000);
 
 const svgX = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 const svgCheck = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';

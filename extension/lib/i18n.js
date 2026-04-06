@@ -67,6 +67,8 @@ const locales = {
     editNote: 'Edit Note',
     notesPlaceholder: 'Write notes in Markdown...',
     unlinked: 'Unlinked',
+    noNotes: 'No notes yet',
+    noActiveTab: 'No active tab',
     untitled: 'Untitled',
     // Flows section
     flows: 'Flows',
@@ -267,6 +269,8 @@ const locales = {
     editNote: '編輯筆記',
     notesPlaceholder: '使用 Markdown 撰寫筆記...',
     unlinked: '未關聯',
+    noNotes: '尚無筆記',
+    noActiveTab: '無當前分頁',
     untitled: '未命名',
     flows: '流程',
     newFlow: '+ 新增',
