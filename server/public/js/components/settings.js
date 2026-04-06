@@ -1,6 +1,7 @@
 import { api } from '../api.js';
 import { t, getLocale, setLocale, getAvailableLocales, getTimezone, setTimezone, getDetectedTimezone, getTimezoneList, formatDateTime } from '../i18n.js';
 import { encryptBackup, decryptBackup, isEncryptedBackup, downloadFile, isCryptoAvailable } from '../crypto.js';
+import { renderChangeCard } from '../sync-change-render.js';
 
 export async function render(container, currentUser) {
   const locales = getAvailableLocales();
@@ -59,6 +60,10 @@ export async function render(container, currentUser) {
       <h2>${t('syncLogs')}</h2>
       <p class="settings-desc">${t('syncLogsDesc')}</p>
       <div id="sync-logs-list"></div>
+      <div id="sync-changes-detail" style="display:none;margin-top:12px"></div>
+      <div style="margin-top:10px;text-align:center">
+        <a href="#/sync-logs" class="btn btn-ghost btn-sm">${t('syncLogsMore')}</a>
+      </div>
     </section>
 
     <section class="settings-section">
@@ -290,6 +295,8 @@ export async function render(container, currentUser) {
     renderSyncLogs(data.logs);
   }
 
+  const syncChangesDetailEl = container.querySelector('#sync-changes-detail');
+
   function renderSyncLogs(logs) {
     if (!logs || logs.length === 0) {
       syncLogsListEl.innerHTML = `<p class="empty-state">${t('noSyncLogs')}</p>`;
@@ -308,7 +315,7 @@ export async function render(container, currentUser) {
         </thead>
         <tbody>
           ${logs.map(log => `
-            <tr>
+            <tr class="sync-log-row${log.action === 'push' ? ' clickable' : ''}" data-log-id="${log.id}" data-action="${log.action}">
               <td><span class="sync-action-badge sync-action-${log.action}">${log.action === 'push' ? t('syncLogPush') : t('syncLogPull')}</span></td>
               <td><code style="font-size:11px;background:#f0f0f0;padding:2px 6px;border-radius:3px" title="${escapeHtml(log.clientId)}">${escapeHtml(log.clientId.substring(0, 8))}…</code></td>
               <td>${log.workspaceCount}</td>
@@ -318,7 +325,38 @@ export async function render(container, currentUser) {
         </tbody>
       </table>
     `;
+
+    // Click handler for push rows to show change details
+    syncLogsListEl.querySelectorAll('.sync-log-row.clickable').forEach(row => {
+      row.addEventListener('click', () => loadSyncChanges(row.dataset.logId));
+    });
   }
+
+  async function loadSyncChanges(logId) {
+    syncChangesDetailEl.style.display = 'block';
+    syncChangesDetailEl.innerHTML = `<p class="empty-state">${t('loading')}...</p>`;
+
+    const { ok, data } = await api.get(`/sync/changes?logId=${logId}`);
+    if (!ok || !data.changes.length) {
+      syncChangesDetailEl.innerHTML = `<p class="empty-state">${t('noSyncChanges')}</p>`;
+      return;
+    }
+
+    syncChangesDetailEl.innerHTML = `
+      <div class="sync-changes-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>${t('syncChangesTitle')}</strong>
+          <button class="btn btn-ghost btn-sm" id="close-sync-changes">✕</button>
+        </div>
+        ${data.changes.map(c => renderChangeCard(c)).join('')}
+      </div>
+    `;
+
+    syncChangesDetailEl.querySelector('#close-sync-changes').addEventListener('click', () => {
+      syncChangesDetailEl.style.display = 'none';
+    });
+  }
+
 
   await loadSyncLogs();
 

@@ -34,7 +34,7 @@ let original = null;    // snapshot for dirty check
 let isDirty = false;
 let saving = false;
 let detailEl = null;
-let activePanel = 'tabs'; // 'tabs' | 'flows'
+let activePanel = 'tabs'; // 'tabs' | 'flows' | 'notes'
 let beforeUnloadHandler = null;
 let hashChangeHandler = null;
 
@@ -53,8 +53,27 @@ export async function render(container, workspaceId) {
   }
 
   state = structuredClone(data);
-  original = JSON.stringify(data);
-  isDirty = false;
+
+  // Migrate: ensure all tabs have persistent IDs
+  let needsMigration = false;
+  for (let i = 0; i < (state.tabs || []).length; i++) {
+    if (!state.tabs[i].id) {
+      state.tabs[i].id = 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) + '-' + i;
+      needsMigration = true;
+    }
+  }
+  // Migrate: convert old url-based note links to tabId-based
+  for (const note of (state.notes || [])) {
+    for (const link of (note.links || [])) {
+      if (link.type === 'tab' && link.url && !link.tabId) {
+        const tab = (state.tabs || []).find(t => t.url === link.url);
+        if (tab?.id) { link.tabId = tab.id; delete link.url; needsMigration = true; }
+      }
+    }
+  }
+
+  original = JSON.stringify(needsMigration ? state : data);
+  isDirty = needsMigration;
 
   // Warn on unsaved changes
   beforeUnloadHandler = (e) => {
@@ -137,6 +156,9 @@ function renderAll() {
       <button class="ws-panel-tab ${activePanel === 'flows' ? 'active' : ''}" data-panel="flows">
         ${svgFlow} ${t('flows')}${flowCount > 0 ? ` <span class="ws-panel-badge">${flowCount}</span>` : ''}
       </button>
+      <button class="ws-panel-tab ${activePanel === 'notes' ? 'active' : ''}" data-panel="notes">
+        ${svgNotes} ${t('notesLabel')}${(state.notes || []).length > 0 ? ` <span class="ws-panel-badge">${(state.notes || []).length}</span>` : ''}
+      </button>
     </div>
 
     <div class="ws-panel" id="ws-panel-tabs" ${activePanel !== 'tabs' ? 'style="display:none"' : ''}>
@@ -165,15 +187,34 @@ function renderAll() {
     <div class="ws-panel" id="ws-panel-flows" ${activePanel !== 'flows' ? 'style="display:none"' : ''}>
       <div id="ws-flows"></div>
     </div>
+
+    <div class="ws-panel" id="ws-panel-notes" ${activePanel !== 'notes' ? 'style="display:none"' : ''}>
+      <div id="ws-notes"></div>
+    </div>
+
+    <div class="notes-drawer" id="notes-drawer" style="display:none">
+      <div class="notes-drawer-header">
+        <span class="notes-drawer-title" id="notes-drawer-title"></span>
+        <button class="btn btn-sm btn-outline" id="notes-preview-toggle">${t('preview')}</button>
+        <button class="btn-icon" id="notes-drawer-close">${svgX}</button>
+      </div>
+      <textarea id="notes-drawer-editor" placeholder="${t('notesPlaceholder')}"></textarea>
+      <div id="notes-drawer-preview" class="notes-preview" style="display:none"></div>
+      <div class="notes-drawer-links" id="notes-drawer-links"></div>
+      <div class="notes-drawer-footer"><span id="notes-char-count">0 / 2000</span></div>
+    </div>
+    <div class="notes-drawer-backdrop" id="notes-backdrop" style="display:none"></div>
   `;
 
   updateMeta();
   renderGroups();
   renderFlows();
+  renderNotes();
   bindHeader();
   bindPanelBar();
   bindAddForms();
   bindSave();
+  bindNotesDrawer();
 }
 
 function bindPanelBar() {
@@ -183,6 +224,8 @@ function bindPanelBar() {
       detailEl.querySelectorAll('.ws-panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === activePanel));
       detailEl.querySelector('#ws-panel-tabs').style.display = activePanel === 'tabs' ? '' : 'none';
       detailEl.querySelector('#ws-panel-flows').style.display = activePanel === 'flows' ? '' : 'none';
+      detailEl.querySelector('#ws-panel-notes').style.display = activePanel === 'notes' ? '' : 'none';
+      if (activePanel === 'notes') renderNotes();
     });
   });
 }
@@ -214,6 +257,7 @@ function renderGroups() {
           <span class="ws-group-color-bar" style="background: ${color}"></span>
           <span class="ws-group-title">${escapeHtml(group.title || t('untitled'))}</span>
           <span class="ws-group-count">${gtabs.length}</span>
+          <button class="btn-icon ws-notes-btn ${hasNoteFor('group', group.groupId) ? 'has-notes' : ''}" data-action="notes-group" data-gid="${group.groupId}" title="${t('notesLabel')}">${svgNotes}</button>
           <button class="btn-icon ws-group-edit-btn" data-action="edit-group" data-gid="${group.groupId}" title="${t('editGroup')}">${svgPencil}</button>
           <button class="btn-icon danger ws-group-del-btn" data-action="del-group" data-gid="${group.groupId}" title="${t('deleteGroup')}">${svgX}</button>
           <svg class="ws-group-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -362,6 +406,292 @@ function countBlocks(blocks) {
   return count;
 }
 
+// --- Notes helpers ---
+function getNotesArray() { return state.notes || []; }
+
+function hasNoteFor(type, id) {
+  return getNotesArray().some(n => n.links.some(l =>
+    type === 'workspace' ? l.type === 'workspace' :
+    type === 'group' ? (l.type === 'group' && l.groupId === id) :
+    type === 'tab' ? (l.type === 'tab' && l.tabId === id) : false
+  ));
+}
+
+function findNotesFor(type, id) {
+  return getNotesArray().filter(n => n.links.some(l =>
+    type === 'workspace' ? l.type === 'workspace' :
+    type === 'group' ? (l.type === 'group' && l.groupId === id) :
+    type === 'tab' ? (l.type === 'tab' && l.tabId === id) : false
+  ));
+}
+
+function getLinkLabel(link) {
+  if (link.type === 'workspace') return `📂 ${state.name}`;
+  if (link.type === 'group') {
+    const g = (state.groups || []).find(g => g.groupId === link.groupId);
+    return `📁 ${g ? g.title : link.groupId}`;
+  }
+  if (link.type === 'tab') {
+    const tab = (state.tabs || []).find(t => t.id === link.tabId);
+    return `📄 ${tab ? (tab.title || tab.url) : link.tabId}`;
+  }
+  return '?';
+}
+
+function generateNoteId() { return 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); }
+
+// --- Notes panel ---
+function renderNotes() {
+  const notesEl = detailEl.querySelector('#ws-notes');
+  const notes = getNotesArray();
+
+  let html = `
+    <div class="ws-notes-section-header">
+      <span>${t('notesLabel')} (${notes.length})</span>
+      <button class="btn btn-sm btn-outline" id="ws-add-note-btn">${svgPlus} ${t('addNote')}</button>
+    </div>`;
+
+  if (notes.length === 0) {
+    html += `<div class="ws-notes-empty">${t('noNotes')}</div>`;
+  } else {
+    html += notes.map(note => {
+      const preview = note.content.length > 120 ? note.content.slice(0, 120) + '…' : note.content;
+      const linkChips = note.links.map(l => `<span class="ws-note-link-chip ${l.type}">${escapeHtml(getLinkLabel(l))}</span>`).join('');
+      return `
+        <div class="ws-note-card" data-note-id="${note.id}">
+          <div class="ws-note-card-content">
+            <div class="ws-note-card-preview notes-preview">${renderMarkdown(preview)}</div>
+            <div class="ws-note-card-links">${linkChips || `<span class="ws-note-link-chip unlinked">${t('unlinked')}</span>`}</div>
+          </div>
+          <div class="ws-note-card-actions">
+            <button class="btn-icon ws-note-edit" title="${t('edit')}">${svgPencil}</button>
+            <button class="btn-icon danger ws-note-del" title="${t('removeTab')}">${svgX}</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  notesEl.innerHTML = html;
+
+  // Add note
+  notesEl.querySelector('#ws-add-note-btn').addEventListener('click', () => {
+    const note = { id: generateNoteId(), content: '', links: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    if (!state.notes) state.notes = [];
+    state.notes.push(note);
+    markDirty();
+    openNoteEditor(note.id);
+  });
+
+  // Edit note
+  notesEl.querySelectorAll('.ws-note-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const noteId = btn.closest('.ws-note-card').dataset.noteId;
+      openNoteEditor(noteId);
+    });
+  });
+
+  // Delete note
+  notesEl.querySelectorAll('.ws-note-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const noteId = btn.closest('.ws-note-card').dataset.noteId;
+      state.notes = (state.notes || []).filter(n => n.id !== noteId);
+      markDirty();
+      renderNotes();
+      renderGroups();
+    });
+  });
+
+  // Click card to edit
+  notesEl.querySelectorAll('.ws-note-card').forEach(card => {
+    card.addEventListener('click', () => openNoteEditor(card.dataset.noteId));
+  });
+}
+
+// --- Note editor drawer ---
+let editingNoteId = null;
+
+function openNoteEditor(noteId) {
+  editingNoteId = noteId;
+  const note = (state.notes || []).find(n => n.id === noteId);
+  if (!note) return;
+
+  const drawer = detailEl.querySelector('#notes-drawer');
+  const backdrop = detailEl.querySelector('#notes-backdrop');
+  const editor = detailEl.querySelector('#notes-drawer-editor');
+  const preview = detailEl.querySelector('#notes-drawer-preview');
+  const titleEl = detailEl.querySelector('#notes-drawer-title');
+  const charCount = detailEl.querySelector('#notes-char-count');
+  const toggleBtn = detailEl.querySelector('#notes-preview-toggle');
+  const linksEl = detailEl.querySelector('#notes-drawer-links');
+
+  titleEl.textContent = t('editNote');
+  editor.value = note.content;
+  editor.maxLength = 2000;
+  editor.style.display = '';
+  preview.style.display = 'none';
+  toggleBtn.textContent = t('preview');
+  charCount.textContent = `${note.content.length} / 2000`;
+  drawer.style.display = '';
+  backdrop.style.display = '';
+
+  // Render link management
+  renderNoteLinks(linksEl, note);
+
+  setTimeout(() => {
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+  }, 10);
+  editor.focus();
+}
+
+function updateLinkChips(container, note) {
+  const chipsEl = container.querySelector('.ws-note-links-current');
+  const chips = note.links.map((l, i) => `<span class="ws-note-link-chip ${l.type} removable" data-link-idx="${i}">${escapeHtml(getLinkLabel(l))} ×</span>`).join('');
+  chipsEl.innerHTML = chips || `<span style="color:var(--color-text-tertiary);font-size:0.8125rem">${t('noLinks')}</span>`;
+  // Re-bind chip removal
+  chipsEl.querySelectorAll('.ws-note-link-chip.removable').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const idx = parseInt(chip.dataset.linkIdx);
+      note.links.splice(idx, 1);
+      note.updatedAt = new Date().toISOString();
+      markDirty();
+      updateLinkChips(container, note);
+      // Also update checkboxes
+      container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        const type = cb.dataset.linkType;
+        if (type === 'workspace') cb.checked = note.links.some(l => l.type === 'workspace');
+        else if (type === 'group') cb.checked = note.links.some(l => l.type === 'group' && l.groupId === cb.dataset.linkGid);
+        else if (type === 'tab') cb.checked = note.links.some(l => l.type === 'tab' && l.tabId === cb.dataset.linkTabId);
+      });
+      renderGroups();
+    });
+  });
+}
+
+function renderNoteLinks(container, note) {
+  const groups = state.groups || [];
+  const tabs = state.tabs || [];
+
+  // Build picker options
+  const hasWs = note.links.some(l => l.type === 'workspace');
+  const linkedGroupIds = new Set(note.links.filter(l => l.type === 'group').map(l => l.groupId));
+  const linkedTabIds = new Set(note.links.filter(l => l.type === 'tab').map(l => l.tabId));
+
+  container.innerHTML = `
+    <div class="ws-note-links-current"></div>
+    <details class="ws-note-link-picker">
+      <summary class="btn btn-sm btn-outline">${svgPlus} ${t('addLink')}</summary>
+      <div class="ws-note-link-picker-body">
+        <label class="ws-note-link-option"><input type="checkbox" data-link-type="workspace" ${hasWs ? 'checked' : ''}> 📂 ${escapeHtml(state.name)}</label>
+        ${groups.length > 0 ? `<div class="ws-note-link-divider">${t('groups')}</div>` : ''}
+        ${groups.map(g => `<label class="ws-note-link-option"><input type="checkbox" data-link-type="group" data-link-gid="${g.groupId}" ${linkedGroupIds.has(g.groupId) ? 'checked' : ''}> 📁 ${escapeHtml(g.title || t('untitled'))}</label>`).join('')}
+        ${tabs.length > 0 ? `<div class="ws-note-link-divider">${t('tabs')}</div>` : ''}
+        ${tabs.map(tab => `<label class="ws-note-link-option"><input type="checkbox" data-link-type="tab" data-link-tab-id="${tab.id || ''}" ${linkedTabIds.has(tab.id) ? 'checked' : ''}> 📄 ${escapeHtml(tab.title || tab.url)}</label>`).join('')}
+      </div>
+    </details>
+  `;
+
+  // Render chips (without rebuilding the picker)
+  updateLinkChips(container, note);
+
+  // Checkbox changes — update links without re-rendering the picker
+  container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const type = cb.dataset.linkType;
+      if (type === 'workspace') {
+        if (cb.checked) { note.links.push({ type: 'workspace' }); }
+        else { note.links = note.links.filter(l => l.type !== 'workspace'); }
+      } else if (type === 'group') {
+        const gid = cb.dataset.linkGid;
+        if (cb.checked) { note.links.push({ type: 'group', groupId: gid }); }
+        else { note.links = note.links.filter(l => !(l.type === 'group' && l.groupId === gid)); }
+      } else if (type === 'tab') {
+        const tabId = cb.dataset.linkTabId;
+        if (cb.checked) { note.links.push({ type: 'tab', tabId }); }
+        else { note.links = note.links.filter(l => !(l.type === 'tab' && l.tabId === tabId)); }
+      }
+      note.updatedAt = new Date().toISOString();
+      markDirty();
+      // Only update the chips display, keep picker open
+      updateLinkChips(container, note);
+      renderGroups();
+    });
+  });
+}
+
+function closeNotesDrawer() {
+  const drawer = detailEl.querySelector('#notes-drawer');
+  const backdrop = detailEl.querySelector('#notes-backdrop');
+  drawer.classList.remove('open');
+  backdrop.classList.remove('open');
+  setTimeout(() => {
+    drawer.style.display = 'none';
+    backdrop.style.display = 'none';
+  }, 200);
+  editingNoteId = null;
+  renderNotes();
+}
+
+function bindNotesDrawer() {
+  const editor = detailEl.querySelector('#notes-drawer-editor');
+  const charCount = detailEl.querySelector('#notes-char-count');
+  const toggleBtn = detailEl.querySelector('#notes-preview-toggle');
+  const preview = detailEl.querySelector('#notes-drawer-preview');
+  const closeBtn = detailEl.querySelector('#notes-drawer-close');
+  const backdrop = detailEl.querySelector('#notes-backdrop');
+
+  editor.addEventListener('input', () => {
+    charCount.textContent = `${editor.value.length} / 2000`;
+    if (!editingNoteId) return;
+    const note = (state.notes || []).find(n => n.id === editingNoteId);
+    if (note) {
+      note.content = editor.value;
+      note.updatedAt = new Date().toISOString();
+      markDirty();
+    }
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    const isPreview = editor.style.display !== 'none';
+    if (isPreview) {
+      preview.innerHTML = renderMarkdown(editor.value);
+      editor.style.display = 'none';
+      preview.style.display = '';
+      toggleBtn.textContent = t('edit');
+    } else {
+      editor.style.display = '';
+      preview.style.display = 'none';
+      toggleBtn.textContent = t('preview');
+      editor.focus();
+    }
+  });
+
+  closeBtn.addEventListener('click', closeNotesDrawer);
+  backdrop.addEventListener('click', closeNotesDrawer);
+}
+
+// --- Minimal Markdown renderer ---
+function renderMarkdown(md) {
+  if (!md) return '';
+  let html = escapeHtml(md);
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+  html = html.replace(/(?<!\n)\n(?!\n)/g, '<br>');
+  html = html.replace(/\n\n+/g, '</p><p>');
+  html = '<p>' + html + '</p>';
+  html = html.replace(/<p>\s*<\/p>/g, '');
+  return html;
+}
+
 const svgFlow = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
 
 function renderTab(tab, idx) {
@@ -385,6 +715,7 @@ function renderTab(tab, idx) {
         <div class="ws-tab-url">${escapeHtml(tab.url)}</div>
       </div>
       ${tab.pinned ? `<span class="ws-tab-pin">${t('pin')}</span>` : ''}
+      <button class="btn-icon ws-notes-btn ${hasNoteFor('tab', tab.id) ? 'has-notes' : ''}" data-action="notes-tab" data-tab-id="${tab.id || ''}" title="${t('notesLabel')}">${svgNotes}</button>
       <a class="btn-icon ws-tab-open" href="${escapeAttr(tab.url)}" target="_blank" rel="noopener noreferrer" title="${t('openInNewTab')}" aria-label="${t('openInNewTab')}">${svgExternalLink}</a>
       <select class="ws-tab-move" title="${t('moveToGroup')}" aria-label="${t('moveTabToGroup')}">${moveOptions}</select>
       <button class="btn-icon danger ws-tab-del" title="${t('removeTab')}" aria-label="${t('removeTab')}">${svgX}</button>
@@ -453,6 +784,52 @@ function bindGroupEvents(groupsEl) {
     header.addEventListener('click', (e) => {
       if (e.target.closest('button') || e.target.closest('select')) return;
       header.closest('.ws-group').classList.toggle('collapsed');
+    });
+  });
+
+  // Group notes — find or create note linked to this group
+  groupsEl.querySelectorAll('[data-action="notes-group"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const gid = btn.dataset.gid;
+      let existing = findNotesFor('group', gid);
+      if (existing.length > 0) {
+        openNoteEditor(existing[0].id);
+      } else {
+        const note = { id: generateNoteId(), content: '', links: [{ type: 'group', groupId: gid }], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        if (!state.notes) state.notes = [];
+        state.notes.push(note);
+        markDirty();
+        openNoteEditor(note.id);
+      }
+      activePanel = 'notes';
+      detailEl.querySelectorAll('.ws-panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === 'notes'));
+      detailEl.querySelector('#ws-panel-tabs').style.display = 'none';
+      detailEl.querySelector('#ws-panel-flows').style.display = 'none';
+      detailEl.querySelector('#ws-panel-notes').style.display = '';
+    });
+  });
+
+  // Tab notes — find or create note linked to this tab
+  groupsEl.querySelectorAll('[data-action="notes-tab"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tabId = btn.dataset.tabId;
+      let existing = findNotesFor('tab', tabId);
+      if (existing.length > 0) {
+        openNoteEditor(existing[0].id);
+      } else {
+        const note = { id: generateNoteId(), content: '', links: [{ type: 'tab', tabId }], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        if (!state.notes) state.notes = [];
+        state.notes.push(note);
+        markDirty();
+        openNoteEditor(note.id);
+      }
+      activePanel = 'notes';
+      detailEl.querySelectorAll('.ws-panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === 'notes'));
+      detailEl.querySelector('#ws-panel-tabs').style.display = 'none';
+      detailEl.querySelector('#ws-panel-flows').style.display = 'none';
+      detailEl.querySelector('#ws-panel-notes').style.display = '';
     });
   });
 
@@ -714,6 +1091,7 @@ function addTab(urlInput) {
   try { title = new URL(url).hostname; } catch {}
 
   state.tabs.push({
+    id: 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     url,
     title,
     pinned: false,
@@ -935,7 +1313,8 @@ async function saveWorkspace() {
     savedAt: state.savedAt,
     groups: state.groups,
     tabs: state.tabs,
-    flows: state.flows || []
+    flows: state.flows || [],
+    notes: state.notes || []
   });
 
   saving = false;
@@ -1004,3 +1383,4 @@ const svgLoader = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 const svgExternalLink = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 const svgGrip = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
 const svgTabs = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v6"/></svg>';
+const svgNotes = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';

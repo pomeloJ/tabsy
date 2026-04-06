@@ -135,6 +135,270 @@
     }
     .flow-match-dot { font-size: 11px; color: #ea580c; }
 
+    /* Notes section in current workspace */
+    .current-ws-notes {
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+    .notes-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .notes-section-header span {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .notes-section-header .arrow { transition: transform 0.15s; font-size: 10px; }
+    .notes-section-header .arrow.open { transform: rotate(90deg); }
+    .notes-list { }
+    .notes-list.collapsed { display: none; }
+    .note-item {
+      padding: 8px 10px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      margin-bottom: 4px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .note-item:hover { background: #eaeaea; }
+    .note-item-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .note-item-icon {
+      font-size: 11px;
+      flex-shrink: 0;
+      opacity: 0.7;
+    }
+    .note-item-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .note-item-type {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: #e5f0fa;
+      color: #0078d4;
+      flex-shrink: 0;
+    }
+    .note-item-type.group { background: #e6f4e6; color: #107c10; }
+    .note-item-type.tab { background: #fff4e5; color: #ca5010; }
+    .note-item-preview {
+      font-size: 11px;
+      color: var(--text-sec);
+      line-height: 1.4;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    /* Notes edit overlay */
+    .notes-edit-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .notes-edit-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .notes-edit-header .back-btn {
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      color: var(--text);
+    }
+    .notes-edit-header .title {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .notes-edit-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .notes-edit-body textarea {
+      flex: 1;
+      border: none;
+      outline: none;
+      padding: 12px;
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      resize: none;
+      background: transparent;
+    }
+    .notes-edit-footer {
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--text-sec);
+      text-align: right;
+      background: var(--surface);
+    }
+    /* Notes tree items */
+    .note-tree-item {
+      margin-bottom: 2px;
+      border-radius: var(--radius);
+      padding: 2px 0;
+    }
+    .note-tree-item.active-tab {
+      background: #e5f0fa;
+      border-left: 2px solid var(--primary);
+      padding-left: 6px;
+    }
+    /* Active tab notes — pinned at top */
+    .notes-active-tab {
+      background: #f0f7ff;
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .notes-active-header .note-item-icon {
+      background: #e0ecf7;
+      border-radius: 4px;
+      padding: 1px 3px;
+      font-size: 12px;
+    }
+    .notes-active-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .notes-active-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--primary);
+    }
+    .notes-active-note {
+      background: #fff;
+      border: 1px solid #dde4ec;
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: pointer;
+      max-height: none;
+    }
+    .notes-active-note:hover {
+      background: #e5f0fa;
+    }
+    .notes-active-empty {
+      font-size: 12px;
+      color: #999;
+      padding: 4px 0;
+    }
+    .note-tree-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+    }
+    .note-tree-add {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-sec);
+      padding: 0 6px;
+      line-height: 1.4;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .note-tree-item:hover .note-tree-add { opacity: 1; }
+    .notes-active-header .note-tree-add,
+    .notes-active-empty .note-tree-add { opacity: 1; background: var(--primary); color: #fff; border-color: var(--primary); }
+    .notes-active-header .note-tree-add:hover,
+    .notes-active-empty .note-tree-add:hover { opacity: 0.8; }
+    .note-tree-add:hover { background: var(--border); color: var(--text); }
+    .notes-tree-note {
+      margin: 2px 0 2px 26px;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: var(--text-sec);
+      background: var(--bg);
+      border-radius: 4px;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .notes-tree-note:hover { background: #eaeaea; color: var(--text); }
+    /* Notes editor link chips */
+    .notes-edit-links {
+      padding: 6px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .note-edit-link-chip {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #e5f0fa;
+      color: #0078d4;
+    }
+    .note-item-label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    /* Unlinked notes */
+    .note-tree-item.unlinked { opacity: 0.6; }
+
+    /* Notes indicator on ws-card */
+    .ws-card-notes-badge {
+      font-size: 10px;
+      opacity: 0.6;
+      margin-left: 2px;
+    }
+
     /* Other workspaces collapsible section */
     .other-ws-toggle {
       padding: 8px 12px;
@@ -1219,6 +1483,7 @@
         <button class="btn btn-danger btn-sm" id="quick-delete-btn" data-i18n="delete">Delete</button>
       </div>
       <div class="current-ws-flows" id="current-ws-flows" style="display:none"></div>
+      <div class="current-ws-notes" id="current-ws-notes" style="display:none"></div>
     </div>
 
     <!-- Save as new workspace (collapsible when in a workspace) -->

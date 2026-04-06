@@ -22,6 +22,34 @@ function sanitizeSyncedFlows(flows) {
 }
 
 /**
+ * Merge notes arrays using per-note LWW based on updatedAt.
+ * Notes have unique IDs, so we can union them and pick the newest version.
+ */
+function mergeNotes(localNotes, remoteNotes) {
+  const local = localNotes || [];
+  const remote = remoteNotes || [];
+  const byId = new Map();
+
+  // Add all local notes
+  for (const n of local) byId.set(n.id, n);
+
+  // Merge remote: if same ID, pick newer; if new ID, add
+  for (const rn of remote) {
+    const ln = byId.get(rn.id);
+    if (!ln) {
+      byId.set(rn.id, rn); // new from remote
+    } else {
+      // Both have it — pick newer updatedAt
+      const lt = new Date(ln.updatedAt || ln.createdAt || 0).getTime();
+      const rt = new Date(rn.updatedAt || rn.createdAt || 0).getTime();
+      if (rt > lt) byId.set(rn.id, rn);
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
+/**
  * Get/set lastSyncAt from chrome.storage.local
  */
 async function getLastSyncAt() {
@@ -69,6 +97,7 @@ export async function performSync(openWorkspaceWindows = []) {
   try {
     // --- PULL ---
     const pullResult = await syncPull(lastSyncAt);
+    console.log(`[Tabsy] Pull: ${pullResult.workspaces.length} workspaces returned, lastSyncAt=${lastSyncAt}`);
 
     for (const serverWs of pullResult.workspaces) {
       const localWs = await getById(serverWs.id);
@@ -107,15 +136,27 @@ export async function performSync(openWorkspaceWindows = []) {
         continue;
       }
 
-      // Case 3: No syncedSnapshot (migration) — fall back to LWW
+      // Case 3: No syncedSnapshot (migration) — fall back to LWW, but always merge notes
       if (!localWs.syncedSnapshot) {
         if (new Date(serverWs.savedAt) >= new Date(localWs.savedAt)) {
           serverWs.flows = mergedFlows;
+          serverWs.notes = mergeNotes(localWs.notes, serverWs.notes);
           serverWs.syncStatus = flowsChanged ? 'pending' : 'synced';
           serverWs.lastSyncAt = pullResult.serverTime;
           serverWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
           await save(serverWs);
           pulled++;
+
+          // Live sync to open window
+          const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+          if (openWin) {
+            try {
+              await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
+              liveUpdates++;
+            } catch (e) {
+              console.warn('[Tabsy] Live sync failed:', e.message);
+            }
+          }
         }
         // Either way, snapshot is now set for future merges
         if (!localWs.syncedSnapshot) {
@@ -132,6 +173,8 @@ export async function performSync(openWorkspaceWindows = []) {
       const localChanged = hasWorkspaceChanged(base, localState);
       const remoteChanged = hasWorkspaceChanged(base, remoteState);
 
+      console.log(`[Tabsy] Sync merge for "${localWs.name}": localChanged=${localChanged}, remoteChanged=${remoteChanged}, localTabs=${localState.tabs.length}, remoteTabs=${remoteState.tabs.length}, baseTabs=${base.tabs.length}`);
+
       // Case 4: Only remote changed — accept remote + live sync
       if (!localChanged && remoteChanged) {
         localWs.tabs = serverWs.tabs;
@@ -140,6 +183,7 @@ export async function performSync(openWorkspaceWindows = []) {
         localWs.savedAt = serverWs.savedAt;
         localWs.name = serverWs.name;
         localWs.color = serverWs.color;
+        localWs.notes = mergeNotes(localWs.notes, serverWs.notes);
         localWs.syncStatus = flowsChanged ? 'pending' : 'synced';
         localWs.lastSyncAt = pullResult.serverTime;
         localWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
@@ -159,14 +203,20 @@ export async function performSync(openWorkspaceWindows = []) {
         continue;
       }
 
-      // Case 5: Only local changed — keep local, will push later
+      // Case 5: Only local changed — keep local, but still merge notes from remote
       if (localChanged && !remoteChanged) {
+        const notesMerged = mergeNotes(localWs.notes, serverWs.notes);
+        if (JSON.stringify(notesMerged) !== JSON.stringify(localWs.notes)) {
+          localWs.notes = notesMerged;
+          await save(localWs);
+        }
         continue;
       }
 
-      // Case 6: Neither changed — just update sync metadata
+      // Case 6: Neither changed — just update sync metadata + merge notes
       if (!localChanged && !remoteChanged) {
         localWs.flows = mergedFlows;
+        localWs.notes = mergeNotes(localWs.notes, serverWs.notes);
         localWs.lastSyncAt = pullResult.serverTime;
         localWs.syncStatus = flowsChanged ? 'pending' : 'synced';
         await save(localWs);
@@ -176,8 +226,12 @@ export async function performSync(openWorkspaceWindows = []) {
       // Case 7: Both changed — three-way merge
       const mergeResult = threeWayMerge(base, localState, remoteState);
 
+      // Always merge notes regardless of tab/group conflict status
+      const mergedNotes = mergeNotes(localWs.notes, serverWs.notes);
+
       if (mergeResult.hasConflicts) {
         localWs.syncStatus = 'conflict';
+        localWs.notes = mergedNotes;
         localWs.conflictData = {
           localVersion: { tabs: localWs.tabs, groups: localWs.groups, savedAt: localWs.savedAt },
           remoteVersion: { tabs: serverWs.tabs, groups: serverWs.groups, savedAt: serverWs.savedAt },
@@ -189,6 +243,7 @@ export async function performSync(openWorkspaceWindows = []) {
         // Clean merge — apply and mark as pending for push
         localWs.tabs = mergeResult.merged.tabs;
         localWs.groups = mergeResult.merged.groups;
+        localWs.notes = mergedNotes;
         localWs.savedAt = serverNow();
         localWs.syncStatus = 'pending';
         localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
@@ -225,6 +280,9 @@ export async function performSync(openWorkspaceWindows = []) {
       !w.syncStatus
     );
     const pendingDeletes = await getPendingDeletions();
+    if (toPush.length > 0) {
+      console.log(`[Tabsy] Push: ${toPush.length} workspaces to push:`, toPush.map(w => `${w.name}(${w.tabs.length} tabs, ${w.syncStatus})`));
+    }
 
     // --- Re-check: full inventory sync ---
     // When the normal pull returned nothing new (lastSyncAt was recent), do a
@@ -265,6 +323,109 @@ export async function performSync(openWorkspaceWindows = []) {
           serverWs.flows = sanitizeSyncedFlows(serverWs.flows || []);
           await save(serverWs);
           pulled++;
+          continue;
+        }
+
+        // Case 4: both have it → check if server content differs
+        const localWs = await getById(serverWs.id);
+        if (!localWs || localWs.syncStatus === 'conflict') continue;
+
+        const remoteState = { tabs: serverWs.tabs, groups: serverWs.groups };
+        const localState = { tabs: localWs.tabs, groups: localWs.groups };
+
+        if (!hasWorkspaceChanged(localState, remoteState)) continue;
+
+        console.log(`[Tabsy] Full inventory: content differs for "${localWs.name}" (local=${localState.tabs.length} tabs, server=${remoteState.tabs.length} tabs)`);
+
+        // Use three-way merge if snapshot exists
+        if (localWs.syncedSnapshot) {
+          const base = localWs.syncedSnapshot;
+          const localChanged = hasWorkspaceChanged(base, localState);
+          const remoteChanged = hasWorkspaceChanged(base, remoteState);
+
+          if (!localChanged && remoteChanged) {
+            // Only server changed — accept server
+            localWs.tabs = serverWs.tabs;
+            localWs.groups = serverWs.groups;
+            localWs.savedAt = serverWs.savedAt;
+            localWs.name = serverWs.name;
+            localWs.color = serverWs.color;
+            localWs.notes = mergeNotes(localWs.notes, serverWs.notes);
+            localWs.syncStatus = 'synced';
+            localWs.lastSyncAt = fullPull.serverTime;
+            localWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+            await save(localWs);
+            pulled++;
+
+            const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+            if (openWin) {
+              try {
+                await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
+                liveUpdates++;
+              } catch (e) {
+                console.warn('[Tabsy] Live sync failed:', e.message);
+              }
+            }
+          } else if (localChanged && remoteChanged) {
+            // Both changed — three-way merge
+            const mergeResult = threeWayMerge(base, localState, remoteState);
+            const notesMerged = mergeNotes(localWs.notes, serverWs.notes);
+            if (mergeResult.hasConflicts) {
+              localWs.syncStatus = 'conflict';
+              localWs.notes = notesMerged;
+              localWs.conflictData = {
+                localVersion: { tabs: localWs.tabs, groups: localWs.groups, savedAt: localWs.savedAt },
+                remoteVersion: { tabs: serverWs.tabs, groups: serverWs.groups, savedAt: serverWs.savedAt },
+                conflicts: mergeResult.conflicts
+              };
+              await save(localWs);
+              conflictCount++;
+            } else {
+              localWs.tabs = mergeResult.merged.tabs;
+              localWs.groups = mergeResult.merged.groups;
+              localWs.notes = notesMerged;
+              localWs.savedAt = serverNow();
+              localWs.syncStatus = 'pending';
+              localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
+              await save(localWs);
+              pulled++;
+
+              const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+              if (openWin) {
+                try {
+                  await applyMergedState(openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
+                  liveUpdates++;
+                } catch (e) {
+                  console.warn('[Tabsy] Live sync failed:', e.message);
+                }
+              }
+            }
+          }
+        } else {
+          // No snapshot — LWW, server wins if newer (but always merge notes)
+          if (new Date(serverWs.savedAt) >= new Date(localWs.savedAt)) {
+            localWs.tabs = serverWs.tabs;
+            localWs.groups = serverWs.groups;
+            localWs.savedAt = serverWs.savedAt;
+            localWs.name = serverWs.name;
+            localWs.color = serverWs.color;
+            localWs.notes = mergeNotes(localWs.notes, serverWs.notes);
+            localWs.syncStatus = 'synced';
+            localWs.lastSyncAt = fullPull.serverTime;
+            localWs.syncedSnapshot = { tabs: serverWs.tabs, groups: serverWs.groups };
+            await save(localWs);
+            pulled++;
+
+            const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
+            if (openWin) {
+              try {
+                await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
+                liveUpdates++;
+              } catch (e) {
+                console.warn('[Tabsy] Live sync failed:', e.message);
+              }
+            }
+          }
         }
       }
     }
@@ -278,7 +439,8 @@ export async function performSync(openWorkspaceWindows = []) {
         savedAt: ws.savedAt,
         groups: ws.groups,
         tabs: ws.tabs,
-        flows: ws.flows || []
+        flows: ws.flows || [],
+        notes: ws.notes || []
       }));
 
       const pushResult = await syncPush(pushPayload, pendingDeletes);
@@ -295,8 +457,10 @@ export async function performSync(openWorkspaceWindows = []) {
           const remoteState = { tabs: conflict.serverVersion.tabs, groups: conflict.serverVersion.groups };
           const mergeResult = threeWayMerge(base, localState, remoteState);
 
+          const notesMerged = mergeNotes(localWs.notes, conflict.serverVersion.notes);
           if (mergeResult.hasConflicts) {
             localWs.syncStatus = 'conflict';
+            localWs.notes = notesMerged;
             localWs.conflictData = {
               localVersion: { tabs: localWs.tabs, groups: localWs.groups, savedAt: localWs.savedAt },
               remoteVersion: { tabs: conflict.serverVersion.tabs, groups: conflict.serverVersion.groups, savedAt: conflict.serverVersion.savedAt },
@@ -308,16 +472,18 @@ export async function performSync(openWorkspaceWindows = []) {
             // Clean merge — save merged, will push next cycle
             localWs.tabs = mergeResult.merged.tabs;
             localWs.groups = mergeResult.merged.groups;
+            localWs.notes = notesMerged;
             localWs.savedAt = serverNow();
             localWs.syncStatus = 'pending';
             localWs.syncedSnapshot = { tabs: mergeResult.merged.tabs, groups: mergeResult.merged.groups };
             await save(localWs);
           }
         } else {
-          // No snapshot — LWW fallback, server wins, but preserve local flows
+          // No snapshot — LWW fallback, server wins, but preserve local flows + merge notes
           const serverVer = conflict.serverVersion;
           const localForFlows = await getById(conflict.id);
           serverVer.flows = localForFlows?.flows || serverVer.flows || [];
+          serverVer.notes = mergeNotes(localForFlows?.notes, serverVer.notes);
           serverVer.syncStatus = (serverVer.flows.length > 0) ? 'pending' : 'synced';
           serverVer.lastSyncAt = pushResult.serverTime;
           serverVer.syncedSnapshot = { tabs: serverVer.tabs, groups: serverVer.groups };
@@ -342,6 +508,47 @@ export async function performSync(openWorkspaceWindows = []) {
       await setLastSyncAt(pushResult.serverTime);
     } else {
       await setLastSyncAt(pullResult.serverTime);
+    }
+
+    // --- RECONCILE: ensure open browser windows match stored state ---
+    // Background auto-sync may have already pulled changes but failed to
+    // apply them to the browser, or applyMergedState was never called.
+    // Compare each open workspace window's tabs against stored data.
+    for (const openWin of openWorkspaceWindows) {
+      try {
+        const ws = await getById(openWin.workspaceId);
+        if (!ws || ws.syncStatus === 'conflict') continue;
+
+        const browserTabs = await chrome.tabs.query({ windowId: openWin.windowId });
+        const markerBase = chrome.runtime.getURL('marker.html');
+        const markerTab = browserTabs.find(t => t.url?.startsWith(markerBase));
+        const markerGroupId = markerTab?.groupId ?? -1;
+        const liveTabs = browserTabs.filter(t =>
+          !t.url?.startsWith(markerBase) && (markerGroupId === -1 || t.groupId !== markerGroupId)
+        );
+
+        const storedUrls = new Set(ws.tabs.map(t => t.url));
+        const browserUrls = new Set(liveTabs.map(t => t.url));
+
+        console.log(`[Tabsy] Reconcile check "${ws.name}": stored=${storedUrls.size} tabs, browser=${browserUrls.size} tabs`);
+
+        let needsReconcile = storedUrls.size !== browserUrls.size;
+        if (!needsReconcile) {
+          for (const url of storedUrls) {
+            if (!browserUrls.has(url)) { needsReconcile = true; break; }
+          }
+        }
+
+        if (needsReconcile) {
+          console.log(`[Tabsy] Reconcile: applying stored state to browser for "${ws.name}"`);
+          await applyMergedState(openWin.windowId, ws.tabs, ws.groups);
+          liveUpdates++;
+        } else {
+          console.log(`[Tabsy] Reconcile: browser matches stored for "${ws.name}"`);
+        }
+      } catch (e) {
+        console.warn('[Tabsy] Reconcile failed:', e.message);
+      }
     }
 
     return { pulled, pushed, conflicts: conflictCount, liveUpdates, error: null };
