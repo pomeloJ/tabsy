@@ -214,7 +214,13 @@ export async function performSync(openWorkspaceWindows = []) {
       }
 
       // Case 6: Neither changed — just update sync metadata + merge notes
+      // Always sync name/color from server via LWW (savedAt)
       if (!localChanged && !remoteChanged) {
+        if (serverWs.savedAt > localWs.savedAt) {
+          localWs.name = serverWs.name;
+          localWs.color = serverWs.color;
+          localWs.savedAt = serverWs.savedAt;
+        }
         localWs.flows = mergedFlows;
         localWs.notes = mergeNotes(localWs.notes, serverWs.notes);
         localWs.lastSyncAt = pullResult.serverTime;
@@ -228,6 +234,12 @@ export async function performSync(openWorkspaceWindows = []) {
 
       // Always merge notes regardless of tab/group conflict status
       const mergedNotes = mergeNotes(localWs.notes, serverWs.notes);
+
+      // For all Case 7 paths, sync name/color via LWW
+      if (serverWs.savedAt > localWs.savedAt) {
+        localWs.name = serverWs.name;
+        localWs.color = serverWs.color;
+      }
 
       if (mergeResult.hasConflicts) {
         localWs.syncStatus = 'conflict';
@@ -458,6 +470,11 @@ export async function performSync(openWorkspaceWindows = []) {
           const mergeResult = threeWayMerge(base, localState, remoteState);
 
           const notesMerged = mergeNotes(localWs.notes, conflict.serverVersion.notes);
+          // Sync name/color via LWW — server version is newer (it rejected our push)
+          if (conflict.serverVersion.savedAt > localWs.savedAt) {
+            localWs.name = conflict.serverVersion.name;
+            localWs.color = conflict.serverVersion.color;
+          }
           if (mergeResult.hasConflicts) {
             localWs.syncStatus = 'conflict';
             localWs.notes = notesMerged;

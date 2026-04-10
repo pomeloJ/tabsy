@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.2.1",
+    "date": "2026-04-10",
+    "changes": {
+      "en": [
+        "Fix workspace name/color not syncing from server (name changes in Web UI were ignored by extension)",
+        "Add inline rename for workspaces in extension (double-click workspace name)"
+      ],
+      "zh-TW": [
+        "修正從伺服器同步工作區名稱/顏色的問題（Web UI 改名無法同步到擴充功能）",
+        "擴充功能新增工作區改名功能（雙擊工作區名稱）"
+      ]
+    }
+  },
+  {
     "version": "1.1.0",
     "date": "2026-04-04",
     "changes": {

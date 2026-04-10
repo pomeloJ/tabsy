@@ -453,6 +453,90 @@ currentWsFlows.addEventListener('click', async (e) => {
   }
 });
 
+// Double-click rename for current workspace name
+currentWsLabel.addEventListener('dblclick', async () => {
+  if (!currentWorkspaceData) return;
+  const oldName = currentWorkspaceData.name;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.style.cssText = 'width:100%;font-size:14px;font-weight:600;padding:2px 4px;border:1px solid var(--primary);border-radius:3px;outline:none;';
+  currentWsLabel.textContent = '';
+  currentWsLabel.appendChild(input);
+  input.focus();
+  input.select();
+
+  const finish = async () => {
+    const newName = input.value.trim();
+    if (newName && newName !== oldName) {
+      const ws = await getById(currentWorkspaceData.id);
+      if (ws) {
+        ws.name = newName;
+        ws.savedAt = new Date().toISOString();
+        ws.syncStatus = ws.syncStatus === 'synced' ? 'pending' : ws.syncStatus;
+        await save(ws);
+        currentWorkspaceData.name = newName;
+        // Update Chrome tab group title
+        try {
+          const win = await chrome.windows.getCurrent({ populate: true });
+          const markerTab = win.tabs.find(t => isMarkerUrl(t.url));
+          if (markerTab && markerTab.groupId !== -1) {
+            await chrome.tabGroups.update(markerTab.groupId, { title: `📂 ${newName}` });
+          }
+        } catch {}
+        triggerAutoSync();
+      }
+    }
+    await detectCurrentWorkspace();
+    await renderList();
+  };
+
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = oldName; input.blur(); }
+  });
+});
+
+// Double-click rename for workspace cards in list
+wsList.addEventListener('dblclick', async (e) => {
+  const nameEl = e.target.closest('.ws-card-name');
+  if (!nameEl) return;
+  const card = nameEl.closest('.ws-card');
+  if (!card) return;
+  const wsId = card.dataset.id;
+  const ws = await getById(wsId);
+  if (!ws) return;
+
+  const oldName = ws.name;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.style.cssText = 'width:100%;font-size:12px;padding:2px 4px;border:1px solid var(--primary);border-radius:3px;outline:none;';
+  nameEl.textContent = '';
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  const finish = async () => {
+    const newName = input.value.trim();
+    if (newName && newName !== oldName) {
+      ws.name = newName;
+      ws.savedAt = new Date().toISOString();
+      ws.syncStatus = ws.syncStatus === 'synced' ? 'pending' : ws.syncStatus;
+      await save(ws);
+      triggerAutoSync();
+    }
+    await renderList();
+  };
+
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = oldName; input.blur(); }
+  });
+});
+
 // Double-click rename for current-ws flows
 currentWsFlows.addEventListener('dblclick', (e) => {
   const el = e.target.closest('[data-edit-flow]');
