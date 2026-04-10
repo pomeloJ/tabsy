@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tabsy",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Browser workspace management — save, restore, and sync tab workspaces",
   "permissions": ["tabs", "tabGroups", "storage", "sidePanel", "alarms", "scripting"],
   "host_permissions": ["<all_urls>"],
