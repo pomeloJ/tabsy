@@ -11,11 +11,16 @@ function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
  */
 export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
   // Verify window still exists
+  let win;
   try {
-    await chrome.windows.get(windowId);
+    win = await chrome.windows.get(windowId);
   } catch {
     return;
   }
+
+  // Remember active tab so we can restore focus after sync operations
+  const activeTabs = await chrome.tabs.query({ windowId, active: true });
+  const activeTabId = activeTabs[0]?.id;
 
   // Get current browser tabs (excluding marker and its group)
   const allBrowserTabs = await chrome.tabs.query({ windowId });
@@ -38,6 +43,10 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
       // URLs match — still check groups and tab order
       await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId);
       await syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId);
+      // Restore active tab focus
+      if (activeTabId) {
+        try { await chrome.tabs.update(activeTabId, { active: true }); } catch {}
+      }
       return;
     }
   }
@@ -80,6 +89,13 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
 
   // Update pinned state for existing tabs
   await syncPinnedState(windowId, mergedTabs, markerGroupId);
+
+  // Restore active tab focus if it still exists (prevent tab jumping during sync)
+  if (activeTabId) {
+    try {
+      await chrome.tabs.update(activeTabId, { active: true });
+    } catch { /* tab was removed during sync */ }
+  }
 }
 
 /**
