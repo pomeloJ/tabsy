@@ -4,6 +4,7 @@ function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
 /**
  * Apply merged workspace state to an open browser window.
  * Opens missing tabs, closes removed tabs, rebuilds group structure.
+ * Carefully preserves the user's active tab focus to avoid disruption.
  *
  * @param {number} windowId - Chrome window ID
  * @param {Array} mergedTabs - Workspace tab objects from merge result
@@ -11,9 +12,8 @@ function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
  */
 export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
   // Verify window still exists
-  let win;
   try {
-    win = await chrome.windows.get(windowId);
+    await chrome.windows.get(windowId);
   } catch {
     return;
   }
@@ -21,6 +21,12 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
   // Remember active tab so we can restore focus after sync operations
   const activeTabs = await chrome.tabs.query({ windowId, active: true });
   const activeTabId = activeTabs[0]?.id;
+
+  // Helper: restore active tab focus (best-effort)
+  const restoreFocus = async () => {
+    if (!activeTabId) return;
+    try { await chrome.tabs.update(activeTabId, { active: true }); } catch {}
+  };
 
   // Get current browser tabs (excluding marker and its group)
   const allBrowserTabs = await chrome.tabs.query({ windowId });
@@ -40,18 +46,16 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
       if (!currentUrlSet.has(url)) { same = false; break; }
     }
     if (same) {
-      // URLs match — still check groups and tab order
-      await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId);
-      await syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId);
-      // Restore active tab focus
-      if (activeTabId) {
-        try { await chrome.tabs.update(activeTabId, { active: true }); } catch {}
-      }
+      // URLs match — only touch groups/order if they actually differ
+      await syncGroupsIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId, currentTabs);
+      await syncTabOrderIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId);
+      await restoreFocus();
       return;
     }
   }
 
-  // Close tabs that should not exist
+  // Close tabs that should not exist — but never close the active tab
+  // if it's being removed, close it last after restoring focus to another tab
   const toCloseIds = currentTabs
     .filter(t => !mergedUrlSet.has(t.url))
     .map(t => t.id);
@@ -82,57 +86,145 @@ export async function applyMergedState(windowId, mergedTabs, mergedGroups) {
   }
 
   // Rebuild group structure after tab changes
-  await syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap);
+  await syncGroupsIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId, null, newTabMap);
 
   // Enforce correct tab order (new tabs are appended at end, groups may rearrange)
-  await syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap);
+  await syncTabOrderIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap);
 
   // Update pinned state for existing tabs
   await syncPinnedState(windowId, mergedTabs, markerGroupId);
 
   // Restore active tab focus if it still exists (prevent tab jumping during sync)
-  if (activeTabId) {
-    try {
-      await chrome.tabs.update(activeTabId, { active: true });
-    } catch { /* tab was removed during sync */ }
-  }
+  await restoreFocus();
 }
 
 /**
- * Rebuild tab group structure to match merged state.
+ * Build a snapshot of current group state for comparison.
+ * Returns { tabGroupMap: Map<tabId, chromeGroupId>, groupProps: Map<chromeGroupId, {title,color,collapsed}> }
  */
-async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap = new Map()) {
+async function getGroupSnapshot(liveTabs, windowId, markerGroupId) {
+  const tabGroupMap = new Map(); // tabId → chromeGroupId
+  const groupProps = new Map();  // chromeGroupId → {title, color, collapsed}
+  const seenGroups = new Set();
+
+  for (const t of liveTabs) {
+    if (t.groupId !== -1 && t.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
+      tabGroupMap.set(t.id, t.groupId);
+      if (!seenGroups.has(t.groupId)) {
+        seenGroups.add(t.groupId);
+        try {
+          const g = await chrome.tabGroups.get(t.groupId);
+          groupProps.set(t.groupId, { title: g.title || '', color: g.color || 'blue', collapsed: g.collapsed || false });
+        } catch {
+          groupProps.set(t.groupId, { title: '', color: 'blue', collapsed: false });
+        }
+      }
+    }
+  }
+  return { tabGroupMap, groupProps };
+}
+
+/**
+ * Only rebuild groups if the current state differs from merged state.
+ */
+async function syncGroupsIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId, existingLiveTabs = null, newTabMap = new Map()) {
   if (mergedGroups.length === 0) return;
 
-  // Get fresh tab list after opens/closes
+  // Get fresh tab list
   const allTabs = await chrome.tabs.query({ windowId });
   const liveTabs = allTabs.filter(t =>
     !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
-  // Build URL → tab ID map (first occurrence wins for duplicates)
-  // Merge newTabMap first — new tabs may still be loading (url could be about:blank)
+  // Build URL → tab ID map
   const urlToTabId = new Map(newTabMap);
   for (const t of liveTabs) {
-    if (!urlToTabId.has(t.url)) {
-      urlToTabId.set(t.url, t.id);
-    }
-    // Also check pendingUrl for tabs still navigating
-    if (t.pendingUrl && !urlToTabId.has(t.pendingUrl)) {
-      urlToTabId.set(t.pendingUrl, t.id);
-    }
+    if (!urlToTabId.has(t.url)) urlToTabId.set(t.url, t.id);
+    if (t.pendingUrl && !urlToTabId.has(t.pendingUrl)) urlToTabId.set(t.pendingUrl, t.id);
   }
 
-  // Build merged groupId → list of tab URLs
-  const groupTabUrls = new Map();
+  // Build desired group membership: mergedGroupId → [tabId]
+  const desiredGroups = new Map();
   for (const tab of mergedTabs) {
     if (tab.groupId) {
-      if (!groupTabUrls.has(tab.groupId)) groupTabUrls.set(tab.groupId, []);
-      groupTabUrls.get(tab.groupId).push(tab.url);
+      if (!desiredGroups.has(tab.groupId)) desiredGroups.set(tab.groupId, []);
+      const tabId = urlToTabId.get(tab.url);
+      if (tabId) desiredGroups.get(tab.groupId).push(tabId);
     }
   }
 
-  // Ungroup all non-marker tabs first (to start clean)
+  // Build current group membership: chromeGroupId → Set<tabId>
+  const currentGroups = new Map(); // chromeGroupId → Set<tabId>
+  for (const t of liveTabs) {
+    if (t.groupId !== -1 && t.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
+      if (!currentGroups.has(t.groupId)) currentGroups.set(t.groupId, new Set());
+      currentGroups.get(t.groupId).add(t.id);
+    }
+  }
+
+  // Build desired group props
+  const desiredGroupProps = new Map();
+  for (const g of mergedGroups) {
+    desiredGroupProps.set(g.groupId, { title: g.title || '', color: g.color || 'blue', collapsed: g.collapsed || false });
+  }
+
+  // Quick check: can we match current chrome groups to desired groups?
+  // If current group count and membership already match, just update props if needed
+  const { groupProps: currentGroupProps } = await getGroupSnapshot(liveTabs, windowId, markerGroupId);
+
+  // Try to match current chrome groups to desired groups by tab membership
+  const chromeToMerged = new Map(); // chromeGroupId → mergedGroupId
+  for (const [chromeGid, memberSet] of currentGroups) {
+    for (const [mergedGid, desiredTabIds] of desiredGroups) {
+      if (memberSet.size === desiredTabIds.length) {
+        const allMatch = desiredTabIds.every(id => memberSet.has(id));
+        if (allMatch && !chromeToMerged.has(chromeGid)) {
+          chromeToMerged.set(chromeGid, mergedGid);
+          break;
+        }
+      }
+    }
+  }
+
+  // Check if all desired groups are matched
+  const matchedMergedIds = new Set(chromeToMerged.values());
+  const allGroupsMatched = mergedGroups.every(g => matchedMergedIds.has(g.groupId)) &&
+    chromeToMerged.size === currentGroups.size;
+
+  if (allGroupsMatched) {
+    // Groups membership matches — just update props if needed
+    for (const [chromeGid, mergedGid] of chromeToMerged) {
+      const desired = desiredGroupProps.get(mergedGid);
+      const current = currentGroupProps.get(chromeGid);
+      if (!desired || !current) continue;
+      if (desired.title !== current.title || desired.color !== current.color || desired.collapsed !== current.collapsed) {
+        try {
+          await chrome.tabGroups.update(chromeGid, {
+            title: desired.title,
+            color: desired.color,
+            collapsed: desired.collapsed
+          });
+        } catch (e) {
+          console.warn(`[Tabsy] Error updating group props:`, e.message);
+        }
+      }
+    }
+    // Also check for tabs that should be ungrouped but aren't
+    const allDesiredTabIds = new Set();
+    for (const ids of desiredGroups.values()) {
+      for (const id of ids) allDesiredTabIds.add(id);
+    }
+    const wronglyGrouped = liveTabs.filter(t =>
+      t.groupId !== -1 && t.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE &&
+      !allDesiredTabIds.has(t.id)
+    );
+    if (wronglyGrouped.length > 0) {
+      try { await chrome.tabs.ungroup(wronglyGrouped.map(t => t.id)); } catch {}
+    }
+    return;
+  }
+
+  // Groups don't match — do full rebuild (ungroup all, then regroup)
   const groupedIds = liveTabs
     .filter(t => t.groupId !== -1 && t.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE)
     .map(t => t.id);
@@ -147,11 +239,7 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, new
 
   // Create groups from merged state
   for (const group of mergedGroups) {
-    const urls = groupTabUrls.get(group.groupId) || [];
-    const tabIds = urls
-      .map(url => urlToTabId.get(url))
-      .filter(Boolean);
-
+    const tabIds = (desiredGroups.get(group.groupId) || []).filter(Boolean);
     if (tabIds.length === 0) continue;
 
     try {
@@ -171,20 +259,31 @@ async function syncGroups(windowId, mergedTabs, mergedGroups, markerGroupId, new
 }
 
 /**
- * Reorder tabs to match the merged state order.
- * Moves grouped tabs within each group, then ungrouped tabs, to match mergedTabs array order.
+ * Only reorder tabs if the current order differs from merged state.
  */
-async function syncTabOrder(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap = new Map()) {
+async function syncTabOrderIfNeeded(windowId, mergedTabs, mergedGroups, markerGroupId, newTabMap = new Map()) {
   const allTabs = await chrome.tabs.query({ windowId });
   const liveTabs = allTabs.filter(t =>
     !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
   );
 
-  // Build URL → tab ID map, merge newTabMap for tabs still loading
+  // Build URL → tab ID map
   const urlToTabId = new Map(newTabMap);
   for (const t of liveTabs) {
     if (!urlToTabId.has(t.url)) urlToTabId.set(t.url, t.id);
     if (t.pendingUrl && !urlToTabId.has(t.pendingUrl)) urlToTabId.set(t.pendingUrl, t.id);
+  }
+
+  // Check if current URL order already matches merged order
+  const currentUrlOrder = liveTabs
+    .sort((a, b) => a.index - b.index)
+    .map(t => t.url);
+  const mergedUrlOrder = mergedTabs.map(t => t.url);
+
+  // Quick check: if URL order already matches, skip all moves
+  if (currentUrlOrder.length === mergedUrlOrder.length &&
+      currentUrlOrder.every((url, i) => url === mergedUrlOrder[i])) {
+    return;
   }
 
   const groupOrder = new Map(mergedGroups.map((g, i) => [g.groupId, i]));
