@@ -729,6 +729,8 @@
     .flow-chip.disabled { opacity: 0.5; }
     .flow-chip .flow-run { color: #107c10; font-weight: 700; cursor: pointer; }
     .flow-chip .flow-run:hover { color: #0b5a0b; }
+    .flow-chip .flow-dup { color: #666; cursor: pointer; margin-left: 2px; }
+    .flow-chip .flow-dup:hover { color: var(--text); }
     .flow-chip .flow-stop { color: #d13438; font-weight: 700; cursor: pointer; }
     .flow-chip .flow-delete { color: #999; cursor: pointer; font-size: 13px; line-height: 1; }
     .flow-chip .flow-delete:hover { color: #d13438; }
@@ -1586,6 +1588,7 @@
     <!-- Footer -->
     <div class="footer">
       <button class="btn btn-danger btn-sm" id="clear-all-btn" data-i18n="clearAll">Clear All</button>
+      <div id="version-info" style="margin-top:8px;font-size:11px;color:var(--text-sec);font-family:monospace"></div>
     </div>
   </div>
 

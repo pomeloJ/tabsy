@@ -33,6 +33,20 @@ const saveBtn = document.getElementById('save-btn');
 const saveAllBtn = document.getElementById('save-all-btn');
 const wsList = document.getElementById('ws-list');
 const clearAllBtn = document.getElementById('clear-all-btn');
+const versionInfo = document.getElementById('version-info');
+if (versionInfo) {
+  const m = chrome.runtime.getManifest();
+  versionInfo.textContent = `v${m.version_name || m.version}`;
+  fetch(chrome.runtime.getURL('build-info.json'))
+    .then(r => r.ok ? r.json() : null)
+    .then(info => {
+      if (!info) return;
+      const date = info.builtAt ? info.builtAt.replace('T', ' ').replace('Z', ' UTC') : '';
+      versionInfo.textContent = `v${info.version} · build ${info.hash} · ${date}`;
+      versionInfo.title = 'Compare this hash across browsers to verify they run the same build';
+    })
+    .catch(() => {});
+}
 const currentWsLabel = document.getElementById('current-ws-label');
 const currentWsMeta = document.getElementById('current-ws-meta');
 const currentWsActions = document.getElementById('current-ws-actions');
@@ -421,6 +435,7 @@ function renderCurrentWsFlows(ws) {
         <span class="flow-item-actions">
           <button class="flow-item-btn run" data-run-flow="${f.id}" data-ws="${ws.id}" title="${t('run')}">&#9654;</button>
           <button class="flow-item-btn edit" data-edit-flow="${f.id}" data-ws="${ws.id}" title="${t('edit')}">&#9998;</button>
+          <button class="flow-item-btn dup" data-dup-flow="${f.id}" data-ws="${ws.id}" title="${t('duplicate')}">&#10063;</button>
           <button class="flow-item-btn delete" data-del-flow="${f.id}" data-ws="${ws.id}" title="${t('delete')}">&times;</button>
         </span>
       </div>`;
@@ -433,10 +448,15 @@ function renderCurrentWsFlows(ws) {
 
 // Event delegation for current-ws flows area
 currentWsFlows.addEventListener('click', async (e) => {
-  const target = e.target.closest('[data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
+  const target = e.target.closest('[data-edit-flow], [data-run-flow], [data-dup-flow], [data-del-flow], [data-add-flow]');
   if (!target) return;
 
-  if (target.dataset.editFlow) {
+  if (target.dataset.dupFlow) {
+    e.stopPropagation();
+    await duplicateFlow(target.dataset.ws, target.dataset.dupFlow);
+    await renderList();
+    await detectCurrentWorkspace();
+  } else if (target.dataset.editFlow) {
     e.stopPropagation();
     openFlowEditor(target.dataset.ws, target.dataset.editFlow);
   } else if (target.dataset.runFlow) {
@@ -882,7 +902,7 @@ async function renderList() {
 
 // --- Event delegation on wsList (single listener, never re-attached) ---
 wsList.addEventListener('click', async (e) => {
-  const target = e.target.closest('[data-restore], [data-delete], [data-notes], [data-resolve], [data-edit-flow], [data-run-flow], [data-del-flow], [data-add-flow]');
+  const target = e.target.closest('[data-restore], [data-delete], [data-notes], [data-resolve], [data-edit-flow], [data-run-flow], [data-dup-flow], [data-del-flow], [data-add-flow]');
   if (!target) return;
 
   if (target.dataset.restore) {
@@ -917,6 +937,10 @@ wsList.addEventListener('click', async (e) => {
     target.disabled = true;
     await resolveConflict(target.dataset.resolve, target.dataset.action);
     target.disabled = false;
+  } else if (target.dataset.dupFlow) {
+    e.stopPropagation();
+    await duplicateFlow(target.dataset.ws, target.dataset.dupFlow);
+    await renderList();
   } else if (target.dataset.editFlow) {
     e.stopPropagation();
     openFlowEditor(target.dataset.ws, target.dataset.editFlow);
@@ -1423,6 +1447,7 @@ function renderFlowChips(workspaceId, flows) {
       ${urlMatched ? '<span class="flow-match-dot" title="Matches current tab">&#9889;</span>' : ''}
       <span class="flow-edit" data-edit-flow="${f.id}" data-ws="${workspaceId}" title="${t('edit')}">${escapeHtml(f.name)}</span>
       <span class="flow-run" data-run-flow="${f.id}" data-ws="${workspaceId}" title="${t('run')}">&#9654;</span>
+      <span class="flow-dup" data-dup-flow="${f.id}" data-ws="${workspaceId}" title="${t('duplicate')}">&#10063;</span>
     </span>`;
   }).join('');
 
@@ -1483,6 +1508,18 @@ async function addNewFlow(workspaceId) {
   const flow = createFlow();
   await saveFlow(workspaceId, flow);
   openFlowEditor(workspaceId, flow.id);
+}
+
+async function duplicateFlow(workspaceId, flowId) {
+  const src = await getFlowById(workspaceId, flowId);
+  if (!src) return;
+  // Deep clone to avoid sharing nested blocks/variables with the original
+  const copy = structuredClone(src);
+  copy.id = crypto.randomUUID();
+  copy.name = `${src.name} (copy)`;
+  // New flows start untrusted — user must re-approve dangerous blocks
+  delete copy.codeTrusted;
+  await saveFlow(workspaceId, copy);
 }
 
 // --- i18n: apply translations to static HTML elements ---
