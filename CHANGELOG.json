@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.2.2",
+    "date": "2026-06-02",
+    "changes": {
+      "en": [
+        "Show build fingerprint (hash + timestamp) at the bottom of the side panel for cross-device version comparison",
+        "Minimize tab disruption and active-tab jumping during background sync"
+      ],
+      "zh-TW": [
+        "側欄底部顯示 build 指紋（hash + 時間），方便跨裝置比對版本是否相同",
+        "減少背景同步時分頁干擾與主動分頁跳動"
+      ]
+    }
+  },
+  {
     "version": "1.2.1",
     "date": "2026-04-10",
     "changes": {
