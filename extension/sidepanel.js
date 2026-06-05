@@ -1270,7 +1270,17 @@ function triggerAutoSync() {
 // --- Sync ---
 const syncBar = document.getElementById('sync-bar');
 const syncBtn = document.getElementById('sync-btn');
+const openWebBtn = document.getElementById('open-web-btn');
 const syncStatus = document.getElementById('sync-status');
+
+openWebBtn?.addEventListener('click', async () => {
+  const { serverUrl } = await getSettings();
+  if (!serverUrl) {
+    settingsToggle?.click();
+    return;
+  }
+  chrome.tabs.create({ url: serverUrl });
+});
 const clockOffsetEl = document.getElementById('clock-offset');
 
 function updateClockOffsetDisplay() {
