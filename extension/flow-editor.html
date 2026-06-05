@@ -134,6 +134,8 @@
     }
     .match-hint.matched { display: block; color: #16a34a; background: rgba(22,163,74,.08); }
     .match-hint.unmatched { display: block; color: #dc2626; background: rgba(220,38,38,.08); }
+    .match-desc { font-size: 11px; color: var(--text-muted, #888); margin-top: 4px; line-height: 1.4; }
+    #flow-match { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; resize: vertical; }
 
     /* === Block canvas === */
     .canvas {
@@ -745,7 +747,8 @@
     </div>
     <div id="flow-match-row" style="width:100%;">
       <label data-i18n="urlMatch">URL Match</label>
-      <textarea id="flow-match" placeholder="*://example.com/*" rows="2"></textarea>
+      <textarea id="flow-match" rows="4" placeholder="*://example.com/*&#10;http://192.168.*.106:81/login&#10;# lines starting with # are comments"></textarea>
+      <div class="match-desc" data-i18n="urlMatchDesc">One pattern per line. * = any characters. Any line that matches triggers the flow. Lines starting with # are comments.</div>
       <div id="flow-match-hint" class="match-hint"></div>
     </div>
   </div>

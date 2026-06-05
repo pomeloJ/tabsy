@@ -140,9 +140,13 @@ export function unmountFlowEditor() {
 
 function matchUrlPattern(pattern, url) {
   if (!pattern) return false;
-  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
-  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
-  return regex.test(url);
+  const lines = pattern.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  for (const line of lines) {
+    const escaped = line.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+    const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+    if (regex.test(url)) return true;
+  }
+  return false;
 }
 
 let _activeTabUrl = '';
@@ -173,8 +177,8 @@ function stopTabListeners() {
 function updateMatchHint() {
   const hint = document.getElementById('flow-match-hint');
   if (!hint) return;
-  const pattern = flowMatch.value.trim();
-  if (!pattern || !_activeTabUrl) {
+  const pattern = flowMatch.value;
+  if (!pattern.trim() || !_activeTabUrl) {
     hint.className = 'match-hint';
     return;
   }
@@ -203,7 +207,7 @@ async function loadFlowToUI() {
 function readFlowFromUI() {
   flow.name = flowNameInput.value.trim() || t('untitled');
   flow.trigger = flowTrigger.value;
-  flow.match = flowMatch.value.trim();
+  flow.match = flowMatch.value.replace(/\s+$/, '');
   flow.enabled = flowEnabled.checked;
 }
 

@@ -71,9 +71,13 @@ let _chromeTabToWsTab = new Map(); // Chrome tab ID → workspace tab.id
 
 function matchUrlPattern(pattern, url) {
   if (!pattern) return false;
-  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
-  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
-  return regex.test(url);
+  const lines = pattern.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  for (const line of lines) {
+    const escaped = line.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+    const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+    if (regex.test(url)) return true;
+  }
+  return false;
 }
 
 async function refreshActiveTabUrl() {

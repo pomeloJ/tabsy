@@ -180,13 +180,16 @@ async function updateBadge(windowId) {
 
 // --- Flow auto-trigger ---
 
-/** Convert glob-style URL pattern (with * wildcards) to RegExp */
+/** Match URL against one or more glob-style patterns (newline-separated, # for comments) */
 function matchUrlPattern(pattern, url) {
   if (!pattern) return false;
-  // Escape regex special chars except *, then replace * with .*
-  const escaped = pattern.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
-  const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
-  return regex.test(url);
+  const lines = pattern.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  for (const line of lines) {
+    const escaped = line.replace(/([.+?^${}()|[\]\\])/g, '\\$1');
+    const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+    if (regex.test(url)) return true;
+  }
+  return false;
 }
 
 /** Check all flows for auto-triggers matching the given tab */
