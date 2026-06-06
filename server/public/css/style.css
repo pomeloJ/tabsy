@@ -2230,3 +2230,87 @@ body.guest .main {
 .notes-preview li {
   margin: 2px 0;
 }
+
+/* --- Recently closed tabs --- */
+.ws-closed-section {
+  margin-top: 8px;
+}
+.ws-closed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.ws-closed-header:hover {
+  background: var(--color-surface-hover);
+}
+.ws-closed-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+.ws-closed-count {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.ws-closed-hint {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+.ws-closed-chevron {
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+.ws-closed-header.collapsed .ws-closed-chevron {
+  transform: rotate(-90deg);
+}
+.ws-closed-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ws-closed-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.ws-closed-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.ws-closed-item-title {
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-closed-item-url {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-closed-item-time {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}

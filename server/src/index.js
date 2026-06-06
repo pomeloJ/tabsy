@@ -72,6 +72,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/extension', require('./routes/extension'));
 app.use('/api/backups', require('./routes/backup'));
+app.use('/api/closed-tabs', require('./routes/closed-tabs'));
 app.use('/api', require('./routes/api'));
 
 // Start backup scheduler

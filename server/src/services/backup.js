@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const db = require('../db');
+const { safeJsonParse } = require('../util');
 
 const BACKUP_DIR = path.resolve(__dirname, '../../data/backups');
 
@@ -324,11 +325,6 @@ function stopScheduler() {
     clearInterval(_schedulerInterval);
     _schedulerInterval = null;
   }
-}
-
-function safeJsonParse(str, fallback = []) {
-  try { return JSON.parse(str); }
-  catch { return fallback; }
 }
 
 module.exports = {

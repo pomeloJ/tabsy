@@ -1,6 +1,7 @@
 import { getAll, getById, save, getConflicts, getAutoSync } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
 import { captureWindow, detectWorkspaceWindows, hasWorkspaceChanged } from './lib/capture.js';
+import { detectClosedTabs, refreshSnapshots } from './lib/closed-tabs.js';
 import { FlowRunner } from './lib/flow-runner.js';
 import { hasDangerousBlocks } from './lib/flow-schema.js';
 
@@ -53,6 +54,18 @@ async function autoSyncCycle() {
   // Step 1: Detect all workspace windows
   const wsWindows = await detectWorkspaceWindows();
 
+  // Step 1b: Detect user-closed tabs vs the previous (post-sync) snapshot.
+  // Runs before sync so it only sees user actions during the idle gap; the
+  // snapshot is refreshed after sync so sync-driven closures aren't counted.
+  const configured = await isSyncConfigured();
+  if (configured) {
+    try {
+      await detectClosedTabs(wsWindows);
+    } catch (e) {
+      console.warn('[Tabsy] Closed-tab detection error:', e.message);
+    }
+  }
+
   let anyChanged = false;
 
   // Step 2: For each workspace window, re-capture and compare
@@ -85,7 +98,6 @@ async function autoSyncCycle() {
   }
 
   // Step 3: Sync with server if configured
-  const configured = await isSyncConfigured();
   if (!configured) return;
 
   const result = await performSync(wsWindows);
@@ -98,6 +110,15 @@ async function autoSyncCycle() {
     if (result.conflicts > 0) {
       console.log(`[Tabsy] ${result.conflicts} conflict(s) detected`);
     }
+  }
+
+  // Step 3b: Refresh closed-tab snapshots AFTER sync, reading the real
+  // post-sync browser state, so sync-driven tab closures are absorbed into the
+  // snapshot and never counted as user closes next cycle.
+  try {
+    await refreshSnapshots(wsWindows);
+  } catch (e) {
+    console.warn('[Tabsy] Closed-tab snapshot refresh error:', e.message);
   }
 
   // Step 4: Update conflict badge

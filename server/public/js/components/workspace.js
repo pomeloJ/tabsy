@@ -182,6 +182,8 @@ function renderAll() {
           <button class="btn btn-sm btn-outline" id="add-group-btn">${svgPlus} ${t('addGroup')}</button>
         </div>
       </div>
+
+      <div id="ws-closed-tabs" class="ws-closed-section"></div>
     </div>
 
     <div class="ws-panel" id="ws-panel-flows" ${activePanel !== 'flows' ? 'style="display:none"' : ''}>
@@ -215,6 +217,137 @@ function renderAll() {
   bindAddForms();
   bindSave();
   bindNotesDrawer();
+  loadClosedTabs();
+}
+
+// --- Recently closed tabs ---
+let closedTabsCollapsed = true;
+
+async function loadClosedTabs() {
+  const el = detailEl.querySelector('#ws-closed-tabs');
+  if (!el) return;
+  const { ok, data } = await api.get(`/closed-tabs?workspaceId=${encodeURIComponent(state.id)}`);
+  const closed = (ok && data && data.closedTabs) ? data.closedTabs : [];
+  renderClosedTabs(el, closed);
+}
+
+function renderClosedTabs(el, closed) {
+  if (!closed || closed.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="ws-closed-header ${closedTabsCollapsed ? 'collapsed' : ''}">
+      <span class="ws-closed-title">${svgHistory} ${t('recentlyClosed')}</span>
+      <span class="ws-closed-count">${closed.length}</span>
+      <span class="ws-closed-hint">${t('recentlyClosedHint')}</span>
+      <svg class="ws-closed-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="ws-closed-list" ${closedTabsCollapsed ? 'style="display:none"' : ''}>
+      ${closed.map(c => {
+        const favicon = getFaviconUrl(c.url);
+        return `
+        <div class="ws-closed-item" data-url="${escapeAttr(c.url)}">
+          <span class="ws-tab-favicon">${favicon ? `<img src="${favicon}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}</span>
+          <div class="ws-closed-item-info">
+            <div class="ws-closed-item-title">${escapeHtml(c.title || c.url)}</div>
+            <div class="ws-closed-item-url">${escapeHtml(c.url)}</div>
+          </div>
+          <span class="ws-closed-item-time" title="${escapeAttr(c.closedAt)}">${formatRelativeTime(c.closedAt)}</span>
+          <button class="btn btn-sm btn-outline ws-closed-recover" title="${t('recover')}">${svgRotate} ${t('recover')}</button>
+          <button class="btn-icon ws-closed-dismiss" title="${t('dismiss')}" aria-label="${t('dismiss')}">${svgX}</button>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  // Collapse toggle
+  el.querySelector('.ws-closed-header').addEventListener('click', () => {
+    closedTabsCollapsed = !closedTabsCollapsed;
+    el.querySelector('.ws-closed-header').classList.toggle('collapsed', closedTabsCollapsed);
+    el.querySelector('.ws-closed-list').style.display = closedTabsCollapsed ? 'none' : '';
+  });
+
+  // Recover
+  el.querySelectorAll('.ws-closed-recover').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = btn.closest('.ws-closed-item');
+      const c = closed.find(x => x.url === item.dataset.url);
+      if (c) recoverClosedTab(c, btn);
+    });
+  });
+
+  // Dismiss
+  el.querySelectorAll('.ws-closed-dismiss').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = btn.closest('.ws-closed-item');
+      dismissClosedTab(item.dataset.url);
+    });
+  });
+}
+
+async function recoverClosedTab(closed, btn) {
+  if (btn) { btn.disabled = true; btn.innerHTML = `${svgLoader} ${t('recover')}`; }
+
+  const { ok, data } = await api.post('/closed-tabs/recover', {
+    workspaceId: state.id,
+    url: closed.url,
+    title: closed.title
+  });
+
+  if (!ok) {
+    if (btn) { btn.disabled = false; btn.innerHTML = `${svgRotate} ${t('recover')}`; }
+    showToast(t('recoverFailed'), true);
+    return;
+  }
+
+  // Reflect the recovered tab locally (ungrouped, at end) so the UI matches the
+  // server, which has already persisted it.
+  const tab = data && data.tab ? data.tab : {
+    id: 't-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    url: closed.url, title: closed.title || closed.url, pinned: false, groupId: null
+  };
+  tab.groupId = null;
+  tab.index = state.tabs.length;
+  const newUrl = !state.tabs.some(t => t.url === tab.url);
+  if (newUrl) state.tabs.push(tab);
+  if (data && data.savedAt) state.savedAt = data.savedAt;
+
+  // Fold the server-persisted recovery into the clean baseline (not the whole
+  // current state) so it isn't counted as a local edit — while preserving any
+  // edits the user made during the recover request as still-dirty.
+  try {
+    const base = JSON.parse(original);
+    if (newUrl && !base.tabs.some(t => t.url === tab.url)) base.tabs.push({ ...tab });
+    if (data && data.savedAt) base.savedAt = data.savedAt;
+    original = JSON.stringify(base);
+  } catch { /* baseline unparseable — leave as-is */ }
+  markDirty();
+
+  renderGroups();
+  showToast(t('tabRecovered'));
+  loadClosedTabs();
+}
+
+async function dismissClosedTab(url) {
+  await api.post('/closed-tabs/dismiss', { workspaceId: state.id, url });
+  loadClosedTabs();
+}
+
+function formatRelativeTime(iso) {
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return '';
+  const diff = Date.now() - then;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return t('justNow');
+  if (min < 60) return t('minutesAgo', { n: min });
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return t('hoursAgo', { n: hr });
+  const day = Math.floor(hr / 24);
+  return t('daysAgo', { n: day });
 }
 
 function bindPanelBar() {
@@ -1384,3 +1517,5 @@ const svgExternalLink = '<svg width="14" height="14" viewBox="0 0 24 24" fill="n
 const svgGrip = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>';
 const svgTabs = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 3v6"/></svg>';
 const svgNotes = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+const svgHistory = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>';
+const svgRotate = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';

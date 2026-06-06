@@ -98,3 +98,10 @@ export async function syncPush(upsert, toDelete) {
     body: JSON.stringify({ upsert, delete: toDelete, clientId })
   });
 }
+
+export async function pushClosedTabs(events) {
+  return request('/api/closed-tabs', {
+    method: 'POST',
+    body: JSON.stringify({ events })
+  });
+}

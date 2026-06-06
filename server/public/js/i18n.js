@@ -102,6 +102,18 @@ const locales = {
     workspaceSaved: 'Workspace saved',
     failedToSaveWorkspace: 'Failed to save workspace',
 
+    // Recently closed tabs
+    recentlyClosed: 'Recently closed',
+    recentlyClosedHint: 'closed in the last 7 days',
+    recover: 'Recover',
+    dismiss: 'Dismiss',
+    recoverFailed: 'Failed to recover tab',
+    tabRecovered: 'Tab recovered — it will reopen on next sync',
+    justNow: 'just now',
+    minutesAgo: '{n} min ago',
+    hoursAgo: '{n} hr ago',
+    daysAgo: '{n} d ago',
+
     // Notes
     notesLabel: 'Notes',
     noNotes: 'No notes yet.',
@@ -414,6 +426,18 @@ const locales = {
     url: '網址',
     workspaceSaved: '工作區已儲存',
     failedToSaveWorkspace: '儲存工作區失敗',
+
+    // Recently closed tabs
+    recentlyClosed: '最近關閉',
+    recentlyClosedHint: '近 7 天內關閉的分頁',
+    recover: '還原',
+    dismiss: '忽略',
+    recoverFailed: '還原分頁失敗',
+    tabRecovered: '已還原分頁 — 下次同步時會重新開啟',
+    justNow: '剛剛',
+    minutesAgo: '{n} 分鐘前',
+    hoursAgo: '{n} 小時前',
+    daysAgo: '{n} 天前',
 
     notesLabel: '筆記',
     noNotes: '尚無筆記。',

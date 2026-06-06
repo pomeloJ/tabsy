@@ -5,15 +5,9 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const requireAuth = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
+const { utc } = require('../util');
 
 const router = express.Router();
-
-/** Ensure SQLite datetime strings are proper ISO 8601 with UTC indicator */
-function utc(dt) {
-  if (!dt) return dt;
-  if (/[Z+\-]\d{0,4}$/.test(dt)) return dt;
-  return dt.replace(' ', 'T') + 'Z';
-}
 
 // Rate limiting for auth endpoints
 const authLimiter = rateLimit({

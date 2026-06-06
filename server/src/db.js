@@ -232,6 +232,24 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(user_id);
 `);
 
+// Migration: closed_tabs table (recently closed tab history, per workspace)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS closed_tabs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    workspace_id TEXT NOT NULL,
+    url TEXT NOT NULL,
+    title TEXT DEFAULT '',
+    closed_at TEXT NOT NULL,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_closed_tabs_user_ws ON closed_tabs(user_id, workspace_id);
+  CREATE INDEX IF NOT EXISTS idx_closed_tabs_closed_at ON closed_tabs(closed_at);
+  -- Idempotent ingest: a re-sent event (same url + close time) cannot duplicate
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_closed_tabs_unique ON closed_tabs(user_id, workspace_id, url, closed_at);
+`);
+
 // Migration: convert datetime('now') format ("YYYY-MM-DD HH:MM:SS") to ISO 8601 ("YYYY-MM-DDTHH:MM:SS.SSSZ")
 // so that string comparisons in pull queries work correctly
 db.exec(`
