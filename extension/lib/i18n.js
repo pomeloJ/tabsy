@@ -63,6 +63,12 @@ const locales = {
     mergeAll: 'Merge All',
     conflictBanner: '&#x26a0; {n} workspace with sync conflicts',
     conflictBannerPlural: '&#x26a0; {n} workspaces with sync conflicts',
+    // Live auto-apply + deferred update prompt
+    liveApply: 'Live',
+    liveApplyHint: 'When on, sync updates change the current window automatically. When off, they wait for you to apply.',
+    pendingApplyText: '↓ Update available for "{name}"',
+    pendingApplyApply: 'Apply',
+    pendingApplyIgnore: 'Keep mine',
     // Notes section
     notes: 'Notes',
     addNote: 'Tap to add note...',
@@ -270,6 +276,12 @@ const locales = {
     mergeAll: '合併全部',
     conflictBanner: '&#x26a0; {n} 個工作區有同步衝突',
     conflictBannerPlural: '&#x26a0; {n} 個工作區有同步衝突',
+    // Live auto-apply + deferred update prompt
+    liveApply: '即時',
+    liveApplyHint: '開啟時，同步更新會自動套用到目前視窗；關閉時，會等你手動套用。',
+    pendingApplyText: '↓ 「{name}」有可套用的更新',
+    pendingApplyApply: '套用',
+    pendingApplyIgnore: '保留目前',
     notes: '筆記',
     addNote: '點擊新增筆記...',
     editNote: '編輯筆記',

@@ -1,8 +1,8 @@
-import { getAll, getById, save, remove, getSettings, getPendingDeletions, clearPendingDeletions } from './storage.js';
+import { getAll, getById, save, remove, getSettings, getPendingDeletions, clearPendingDeletions, getLiveAutoApply } from './storage.js';
 import { syncPull, syncPush, serverNow } from './api-client.js';
 import { threeWayMerge } from './merge.js';
-import { applyMergedState } from './live-sync.js';
-import { hasWorkspaceChanged } from './capture.js';
+import { applyMergedState, windowMatchesState } from './live-sync.js';
+import { hasWorkspaceChanged, captureWindow } from './capture.js';
 import { hasDangerousBlocks } from './flow-schema.js';
 
 /**
@@ -78,14 +78,48 @@ function matchesSnapshot(ws) {
 }
 
 /**
+ * Apply an incoming update to an open window, OR defer it for manual apply.
+ *
+ * When live auto-apply is enabled, the merged state is applied to the browser
+ * window immediately (legacy behavior). When disabled (the default), the window
+ * is left untouched so the user is not disrupted mid-edit; instead the workspace
+ * is flagged `pendingApply` and the badge/side-panel prompt the user to apply it.
+ *
+ * The caller has already written the target state (`tabs`/`groups`) to storage,
+ * so a manual apply later simply replays `applyMergedState` with stored state.
+ *
+ * @returns {{ applied: boolean, deferred: boolean }}
+ */
+async function liveApplyOrDefer(workspaceId, windowId, tabs, groups) {
+  const auto = await getLiveAutoApply();
+  if (auto) {
+    await applyMergedState(windowId, tabs, groups);
+    // Clear any stale pending flag left over from a previous manual session
+    const ws = await getById(workspaceId);
+    if (ws && ws.pendingApply) { delete ws.pendingApply; await save(ws); }
+    return { applied: true, deferred: false };
+  }
+
+  // Manual mode — only flag if the window would actually change
+  const matches = await windowMatchesState(windowId, tabs);
+  const ws = await getById(workspaceId);
+  if (matches) {
+    if (ws && ws.pendingApply) { delete ws.pendingApply; await save(ws); }
+    return { applied: false, deferred: false };
+  }
+  if (ws && !ws.pendingApply) { ws.pendingApply = true; await save(ws); }
+  return { applied: false, deferred: true };
+}
+
+/**
  * Full sync: pull with three-way merge, then push.
  * @param {Array} openWorkspaceWindows - [{ windowId, workspaceId, workspaceName, workspaceColor }]
- * @returns {{ pulled, pushed, conflicts, liveUpdates, error }}
+ * @returns {{ pulled, pushed, conflicts, liveUpdates, deferred, error }}
  */
 export async function performSync(openWorkspaceWindows = []) {
   const configured = await isSyncConfigured();
   if (!configured) {
-    return { pulled: 0, pushed: 0, conflicts: 0, liveUpdates: 0, error: 'Sync not configured' };
+    return { pulled: 0, pushed: 0, conflicts: 0, liveUpdates: 0, deferred: 0, error: 'Sync not configured' };
   }
 
   const lastSyncAt = await getLastSyncAt();
@@ -93,6 +127,7 @@ export async function performSync(openWorkspaceWindows = []) {
   let pushed = 0;
   let conflictCount = 0;
   let liveUpdates = 0;
+  let deferred = 0;
 
   try {
     // --- PULL ---
@@ -151,8 +186,8 @@ export async function performSync(openWorkspaceWindows = []) {
           const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
           if (openWin) {
             try {
-              await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
-              liveUpdates++;
+              const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, serverWs.tabs, serverWs.groups);
+              if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
             } catch (e) {
               console.warn('[Tabsy] Live sync failed:', e.message);
             }
@@ -194,8 +229,8 @@ export async function performSync(openWorkspaceWindows = []) {
         const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
         if (openWin) {
           try {
-            await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
-            liveUpdates++;
+            const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, serverWs.tabs, serverWs.groups);
+            if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
           } catch (e) {
             console.warn('[Tabsy] Live sync failed:', e.message);
           }
@@ -266,8 +301,8 @@ export async function performSync(openWorkspaceWindows = []) {
         const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
         if (openWin) {
           try {
-            await applyMergedState(openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
-            liveUpdates++;
+            const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
+            if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
           } catch (e) {
             console.warn('[Tabsy] Live sync failed:', e.message);
           }
@@ -372,8 +407,8 @@ export async function performSync(openWorkspaceWindows = []) {
             const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
             if (openWin) {
               try {
-                await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
-                liveUpdates++;
+                const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, serverWs.tabs, serverWs.groups);
+                if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
               } catch (e) {
                 console.warn('[Tabsy] Live sync failed:', e.message);
               }
@@ -405,8 +440,8 @@ export async function performSync(openWorkspaceWindows = []) {
               const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
               if (openWin) {
                 try {
-                  await applyMergedState(openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
-                  liveUpdates++;
+                  const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, mergeResult.merged.tabs, mergeResult.merged.groups);
+                  if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
                 } catch (e) {
                   console.warn('[Tabsy] Live sync failed:', e.message);
                 }
@@ -431,8 +466,8 @@ export async function performSync(openWorkspaceWindows = []) {
             const openWin = openWorkspaceWindows.find(w => w.workspaceId === localWs.id);
             if (openWin) {
               try {
-                await applyMergedState(openWin.windowId, serverWs.tabs, serverWs.groups);
-                liveUpdates++;
+                const _r = await liveApplyOrDefer(localWs.id, openWin.windowId, serverWs.tabs, serverWs.groups);
+                if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
               } catch (e) {
                 console.warn('[Tabsy] Live sync failed:', e.message);
               }
@@ -528,13 +563,23 @@ export async function performSync(openWorkspaceWindows = []) {
     }
 
     // --- RECONCILE: ensure open browser windows match stored state ---
-    // Background auto-sync may have already pulled changes but failed to
-    // apply them to the browser, or applyMergedState was never called.
-    // Compare each open workspace window's tabs against stored data.
+    // Purpose: recover cases where a prior pull updated storage but failed
+    // to apply the changes to the browser (e.g. applyMergedState errored
+    // halfway, or the window was briefly unavailable).
+    //
+    // Safety rule: reconcile only ADDS tabs that are missing from the
+    // browser — it never closes tabs. If the browser has tabs that stored
+    // doesn't, that means the user just opened something locally between
+    // capture and now; in that case we re-capture and save the new state
+    // as pending instead of destroying the user's work.
     for (const openWin of openWorkspaceWindows) {
       try {
         const ws = await getById(openWin.workspaceId);
         if (!ws || ws.syncStatus === 'conflict') continue;
+        // Skip windows with a deferred update awaiting manual apply — the
+        // window is intentionally out of sync with stored state until the
+        // user decides, so reconcile must not touch it.
+        if (ws.pendingApply) continue;
 
         const browserTabs = await chrome.tabs.query({ windowId: openWin.windowId });
         const markerBase = chrome.runtime.getURL('marker.html');
@@ -547,19 +592,49 @@ export async function performSync(openWorkspaceWindows = []) {
         const storedUrls = new Set(ws.tabs.map(t => t.url));
         const browserUrls = new Set(liveTabs.map(t => t.url));
 
-        console.log(`[Tabsy] Reconcile check "${ws.name}": stored=${storedUrls.size} tabs, browser=${browserUrls.size} tabs`);
-
-        let needsReconcile = storedUrls.size !== browserUrls.size;
-        if (!needsReconcile) {
-          for (const url of storedUrls) {
-            if (!browserUrls.has(url)) { needsReconcile = true; break; }
-          }
+        // Classify the difference
+        let browserHasExtra = false;
+        for (const url of browserUrls) {
+          if (!storedUrls.has(url)) { browserHasExtra = true; break; }
+        }
+        let storedHasExtra = false;
+        for (const url of storedUrls) {
+          if (!browserUrls.has(url)) { storedHasExtra = true; break; }
         }
 
-        if (needsReconcile) {
+        console.log(`[Tabsy] Reconcile check "${ws.name}": stored=${storedUrls.size}, browser=${browserUrls.size}, browserHasExtra=${browserHasExtra}, storedHasExtra=${storedHasExtra}`);
+
+        if (browserHasExtra) {
+          // User opened tabs locally since last capture — do NOT run
+          // applyMergedState (it would close them). Re-capture and save
+          // as pending so the next push sends the new state.
+          console.log(`[Tabsy] Reconcile: browser has local changes for "${ws.name}" — re-capturing instead of applying stored state`);
+          try {
+            const recaptured = await captureWindow(
+              openWin.windowId,
+              openWin.workspaceName,
+              openWin.workspaceColor,
+              openWin.workspaceId
+            );
+            recaptured.syncStatus = 'pending';
+            recaptured.syncedSnapshot = ws.syncedSnapshot || null;
+            recaptured.flows = ws.flows || [];
+            recaptured.notes = ws.notes || [];
+            recaptured.lastSyncAt = ws.lastSyncAt || null;
+            await save(recaptured);
+          } catch (e) {
+            console.warn('[Tabsy] Reconcile re-capture failed:', e.message);
+          }
+          continue;
+        }
+
+        if (storedHasExtra) {
+          // Stored has tabs the browser is missing — legitimate pull that
+          // didn't get applied. Safe to run applyMergedState because no
+          // local-only tabs exist (browser ⊆ stored).
           console.log(`[Tabsy] Reconcile: applying stored state to browser for "${ws.name}"`);
-          await applyMergedState(openWin.windowId, ws.tabs, ws.groups);
-          liveUpdates++;
+          const _r = await liveApplyOrDefer(openWin.workspaceId, openWin.windowId, ws.tabs, ws.groups);
+          if (_r.applied) liveUpdates++; else if (_r.deferred) deferred++;
         } else {
           console.log(`[Tabsy] Reconcile: browser matches stored for "${ws.name}"`);
         }
@@ -568,9 +643,9 @@ export async function performSync(openWorkspaceWindows = []) {
       }
     }
 
-    return { pulled, pushed, conflicts: conflictCount, liveUpdates, error: null };
+    return { pulled, pushed, conflicts: conflictCount, liveUpdates, deferred, error: null };
   } catch (err) {
     console.error('Sync error:', err);
-    return { pulled, pushed, conflicts: conflictCount, liveUpdates, error: err.message };
+    return { pulled, pushed, conflicts: conflictCount, liveUpdates, deferred, error: err.message };
   }
 }

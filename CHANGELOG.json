@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.2.3",
+    "date": "2026-06-18",
+    "changes": {
+      "en": [
+        "Sync updates to an open window are no longer applied automatically — they wait for you to apply, so your current tabs aren't disrupted while you work",
+        "Extension icon shows a ↓ badge when an update is available; open the side panel to Apply or Keep mine",
+        "New \"Live\" toggle in the sync bar to restore automatic apply if you prefer it"
+      ],
+      "zh-TW": [
+        "同步到開啟中視窗的更新不再自動套用 — 改由你手動套用，操作中分頁不會被打亂",
+        "有可套用更新時，外掛圖示顯示 ↓ 角標；開啟側邊面板可選擇「套用」或「保留目前」",
+        "同步列新增「即時」開關，需要時可切回自動套用"
+      ]
+    }
+  },
+  {
     "version": "1.2.2",
     "date": "2026-06-02",
     "changes": {

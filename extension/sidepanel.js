@@ -3,6 +3,7 @@ import {
   getAll, getById, save, remove, clearAll,
   getSettings, saveSettings, getConflicts,
   getAutoSync, setAutoSync,
+  getLiveAutoApply, setLiveAutoApply, getPendingApplies,
   getFlows, getFlowById, saveFlow, removeFlow,
   getClientId,
   getTimezone, setTimezone, getDetectedTimezone,
@@ -1116,6 +1117,56 @@ async function renderConflictBanner() {
     : t('conflictBanner', { n: conflicts.length });
 }
 
+// --- Pending-apply banner (deferred sync updates) ---
+const pendingApplyBanner = document.getElementById('pending-apply-banner');
+
+async function renderPendingApplyBanner() {
+  const pending = await getPendingApplies();
+  if (pending.length === 0) {
+    pendingApplyBanner.style.display = 'none';
+    pendingApplyBanner.innerHTML = '';
+    return;
+  }
+  pendingApplyBanner.style.display = 'flex';
+  pendingApplyBanner.innerHTML = '';
+
+  for (const ws of pending) {
+    const row = document.createElement('div');
+    row.className = 'pending-apply-row';
+
+    const text = document.createElement('span');
+    text.className = 'pending-apply-text';
+    text.textContent = t('pendingApplyText', { name: ws.name });
+    row.appendChild(text);
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-primary btn-sm';
+    applyBtn.textContent = t('pendingApplyApply');
+    applyBtn.addEventListener('click', () => resolvePending(ws.id, 'apply', applyBtn, row));
+    row.appendChild(applyBtn);
+
+    const ignoreBtn = document.createElement('button');
+    ignoreBtn.className = 'btn btn-secondary btn-sm';
+    ignoreBtn.textContent = t('pendingApplyIgnore');
+    ignoreBtn.addEventListener('click', () => resolvePending(ws.id, 'ignore', ignoreBtn, row));
+    row.appendChild(ignoreBtn);
+
+    pendingApplyBanner.appendChild(row);
+  }
+}
+
+async function resolvePending(workspaceId, action, btn, row) {
+  row.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  try {
+    await chrome.runtime.sendMessage({ type: 'resolvePendingApply', workspaceId, action });
+  } catch (e) {
+    console.warn('[Tabsy] resolvePendingApply failed:', e.message);
+  }
+  await renderPendingApplyBanner();
+  await detectCurrentWorkspace();
+  await renderList();
+}
+
 // --- Event listeners ---
 saveBtn.addEventListener('click', saveCurrentWindow);
 saveAllBtn.addEventListener('click', saveAllWindows);
@@ -1328,6 +1379,7 @@ async function doSync() {
     syncStatus.className = 'sync-status ok';
     await renderList();
     renderConflictBanner();
+    renderPendingApplyBanner();
   }
 
   updateClockOffsetDisplay();
@@ -1341,6 +1393,14 @@ const autoSyncCheckbox = document.getElementById('auto-sync-checkbox');
 getAutoSync().then(enabled => { autoSyncCheckbox.checked = enabled; });
 autoSyncCheckbox.addEventListener('change', () => {
   setAutoSync(autoSyncCheckbox.checked);
+});
+
+// Live auto-apply toggle (checked = apply sync updates to the current window
+// automatically; unchecked = defer and let the user apply manually)
+const liveApplyCheckbox = document.getElementById('live-apply-checkbox');
+getLiveAutoApply().then(enabled => { liveApplyCheckbox.checked = enabled; });
+liveApplyCheckbox.addEventListener('change', () => {
+  setLiveAutoApply(liveApplyCheckbox.checked);
 });
 
 // Update sync bar after save settings
@@ -1607,6 +1667,7 @@ initColorPicker();
 Promise.all([detectCurrentWorkspace(), refreshActiveTabUrl()]).then(() => renderList()).then(() => {
   // Phase 2: non-critical UI + sync (deferred)
   renderConflictBanner();
+  renderPendingApplyBanner();
   loadSettings();
   updateSyncBar();
   isSyncConfigured().then(configured => {
@@ -1619,6 +1680,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.workspaces) {
     detectCurrentWorkspace().then(() => renderList());
     renderConflictBanner();
+    renderPendingApplyBanner();
   }
 });
 

@@ -1,5 +1,6 @@
 import { getAll, getById, save, getConflicts, getAutoSync } from './lib/storage.js';
 import { performSync, isSyncConfigured } from './lib/sync.js';
+import { applyMergedState } from './lib/live-sync.js';
 import { captureWindow, detectWorkspaceWindows, hasWorkspaceChanged } from './lib/capture.js';
 import { detectClosedTabs, refreshSnapshots } from './lib/closed-tabs.js';
 import { FlowRunner } from './lib/flow-runner.js';
@@ -75,6 +76,10 @@ async function autoSyncCycle() {
       if (!stored) continue;
       // Skip workspaces in conflict — don't overwrite with captured state
       if (stored.syncStatus === 'conflict') continue;
+      // Skip workspaces with a deferred update awaiting manual apply. Their
+      // window is intentionally stale (shows the old state) until the user
+      // applies; re-capturing here would clobber the pending server update.
+      if (stored.pendingApply) continue;
 
       const captured = await captureWindow(windowId, workspaceName, workspaceColor, workspaceId);
 
@@ -123,7 +128,85 @@ async function autoSyncCycle() {
 
   // Step 4: Update conflict badge
   await updateConflictBadge();
+
+  // Step 5: Refresh each workspace window's badge so a deferred update (↓)
+  // surfaces on the extension icon as soon as sync flags it.
+  for (const { windowId } of wsWindows) {
+    await updateBadge(windowId);
+  }
 }
+
+// --- Manual apply / ignore of a deferred sync update ---
+
+/**
+ * Apply the pending (server-side) update to the workspace's open window.
+ * Storage already holds the target state, so we just replay it to the window.
+ */
+async function applyPendingUpdate(workspaceId) {
+  const ws = await getById(workspaceId);
+  if (!ws || !ws.pendingApply) return { ok: false };
+  const wsWindows = await detectWorkspaceWindows();
+  const win = wsWindows.find(w => w.workspaceId === workspaceId);
+  if (win) {
+    try {
+      await applyMergedState(win.windowId, ws.tabs, ws.groups);
+      // Reset closed-tab baselines so this sync-driven change isn't counted
+      // as user-closed tabs on the next cycle.
+      await refreshSnapshots(wsWindows);
+    } catch (e) {
+      console.warn('[Tabsy] Apply pending update failed:', e.message);
+    }
+  }
+  const fresh = await getById(workspaceId);
+  if (fresh) { delete fresh.pendingApply; await save(fresh); }
+  if (win) await updateBadge(win.windowId);
+  return { ok: true };
+}
+
+/**
+ * Discard the pending update and keep the current window. We re-capture the
+ * live window as the new local truth and rebase its snapshot onto the rejected
+ * server state, so the next push makes the local version win (no re-prompt).
+ */
+async function ignorePendingUpdate(workspaceId) {
+  const ws = await getById(workspaceId);
+  if (!ws) return { ok: false };
+  const wsWindows = await detectWorkspaceWindows();
+  const win = wsWindows.find(w => w.workspaceId === workspaceId);
+  if (win) {
+    try {
+      const recaptured = await captureWindow(win.windowId, win.workspaceName, win.workspaceColor, workspaceId);
+      recaptured.syncStatus = 'pending';
+      // Rebase snapshot onto the rejected server state so local counts as the
+      // only change and wins the next merge/push instead of re-deferring.
+      recaptured.syncedSnapshot = { tabs: ws.tabs, groups: ws.groups };
+      recaptured.flows = ws.flows || [];
+      recaptured.notes = ws.notes || [];
+      recaptured.lastSyncAt = ws.lastSyncAt || null;
+      await save(recaptured);
+    } catch (e) {
+      console.warn('[Tabsy] Ignore pending update re-capture failed:', e.message);
+      delete ws.pendingApply;
+      await save(ws);
+    }
+    await updateBadge(win.windowId);
+  } else {
+    delete ws.pendingApply;
+    await save(ws);
+  }
+  return { ok: true };
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'resolvePendingApply') {
+    const handler = msg.action === 'ignore' ? ignorePendingUpdate : applyPendingUpdate;
+    handler(msg.workspaceId).then(sendResponse).catch(e => {
+      console.warn('[Tabsy] resolvePendingApply error:', e.message);
+      sendResponse({ ok: false, error: e.message });
+    });
+    return true; // async response
+  }
+});
 
 // --- Open side panel when clicking the extension icon ---
 chrome.action.onClicked.addListener((tab) => {
@@ -183,15 +266,26 @@ async function updateBadge(windowId) {
       wsColor = ws.color;
     }
 
-    // Check if this specific workspace has a conflict
+    // Badge priority: conflict (!) > pending update (↓) > workspace index
     const hasConflict = ws && ws.syncStatus === 'conflict';
-    const badgeColor = hasConflict ? '#d13438' : wsColor;
-    const badgeText = hasConflict ? '!' : (idx ? String(idx) : '');
+    const hasPending = ws && ws.pendingApply;
+    let badgeColor = wsColor;
+    let badgeText = idx ? String(idx) : '';
+    let titleSuffix = '';
+    if (hasConflict) {
+      badgeColor = '#d13438';
+      badgeText = '!';
+      titleSuffix = ' (conflict)';
+    } else if (hasPending) {
+      badgeColor = '#0078d4';
+      badgeText = '↓';
+      titleSuffix = ' (update available)';
+    }
 
     await chrome.action.setBadgeText({ text: badgeText, windowId });
     await chrome.action.setBadgeBackgroundColor({ color: badgeColor, windowId });
     await chrome.action.setTitle({
-      title: wsName ? `📂 #${idx} ${wsName}${hasConflict ? ' (conflict)' : ''}` : 'Tabsy',
+      title: wsName ? `📂 #${idx} ${wsName}${titleSuffix}` : 'Tabsy',
       windowId
     });
   } catch (e) {

@@ -289,6 +289,27 @@ export async function setAutoSync(enabled) {
   await chrome.storage.local.set({ autoSyncEnabled: !!enabled });
 }
 
+// --- Live auto-apply setting (default: disabled = manual) ---
+// When disabled, incoming sync updates to an OPEN workspace window are NOT
+// applied automatically (which would disrupt the user mid-edit). Instead the
+// workspace is flagged with `pendingApply` and the user applies it manually
+// via the side panel. When enabled, the old auto-apply behavior is restored.
+
+export async function getLiveAutoApply() {
+  const { liveAutoApplyEnabled } = await chrome.storage.local.get('liveAutoApplyEnabled');
+  return liveAutoApplyEnabled === true; // default false (manual)
+}
+
+export async function setLiveAutoApply(enabled) {
+  await chrome.storage.local.set({ liveAutoApplyEnabled: !!enabled });
+}
+
+/** Workspaces that have an incoming update waiting for the user to apply. */
+export async function getPendingApplies() {
+  const all = await getAll();
+  return all.filter(w => w.pendingApply);
+}
+
 // --- Migration: 把舊的獨立 flows key 搬到 workspace.flows ---
 async function migrateFlows() {
   const { flows, _flowsMigrated } = await chrome.storage.local.get(['flows', '_flowsMigrated']);

@@ -2,6 +2,34 @@ const MARKER_BASE = chrome.runtime.getURL('marker.html');
 function isMarkerUrl(url) { return url?.startsWith(MARKER_BASE); }
 
 /**
+ * Does the open window already match the given target tab set (by URL)?
+ * Used to decide whether an incoming update would actually change the window
+ * before we bother flagging it for manual apply.
+ * @returns {Promise<boolean>} true if no change is needed (or window is gone)
+ */
+export async function windowMatchesState(windowId, mergedTabs) {
+  try {
+    await chrome.windows.get(windowId);
+  } catch {
+    return true; // window gone — nothing to apply
+  }
+  const allBrowserTabs = await chrome.tabs.query({ windowId });
+  const markerTab = allBrowserTabs.find(t => isMarkerUrl(t.url));
+  const markerGroupId = markerTab?.groupId ?? -1;
+  const currentTabs = allBrowserTabs.filter(t =>
+    !isMarkerUrl(t.url) && (markerGroupId === -1 || t.groupId !== markerGroupId)
+  );
+
+  const mergedUrlSet = new Set(mergedTabs.map(t => t.url));
+  const currentUrlSet = new Set(currentTabs.map(t => t.url));
+  if (mergedUrlSet.size !== currentUrlSet.size) return false;
+  for (const url of mergedUrlSet) {
+    if (!currentUrlSet.has(url)) return false;
+  }
+  return true;
+}
+
+/**
  * Apply merged workspace state to an open browser window.
  * Opens missing tabs, closes removed tabs, rebuilds group structure.
  * Carefully preserves the user's active tab focus to avoid disruption.

@@ -696,6 +696,27 @@
       gap: 6px;
     }
 
+    .pending-apply-banner {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-bottom: 1px solid #bcdcf5;
+    }
+    .pending-apply-row {
+      padding: 8px 12px;
+      background: #e5f1fb;
+      color: #0a4a82;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .pending-apply-row .pending-apply-text {
+      flex: 1;
+      font-weight: 600;
+    }
+    .pending-apply-row .btn-sm { padding: 3px 8px; font-size: 11px; }
+
     /* Flow section in workspace card */
     .ws-flow-section {
       margin-top: 8px;
@@ -1511,11 +1532,18 @@
         <input type="checkbox" id="auto-sync-checkbox" checked>
         <span data-i18n="auto">Auto</span>
       </label>
+      <label class="auto-sync-toggle" id="live-apply-toggle-label" title="" data-i18n-title="liveApplyHint">
+        <input type="checkbox" id="live-apply-checkbox">
+        <span data-i18n="liveApply">Live</span>
+      </label>
       <span class="clock-offset" id="clock-offset" title=""></span>
     </div>
 
     <!-- Conflict banner -->
     <div id="conflict-banner" class="conflict-banner" style="display:none"></div>
+
+    <!-- Pending-apply banner (deferred sync updates awaiting manual apply) -->
+    <div id="pending-apply-banner" class="pending-apply-banner" style="display:none"></div>
 
     <!-- Flow runner log -->
     <div class="flow-log-panel" id="flow-log-panel">
